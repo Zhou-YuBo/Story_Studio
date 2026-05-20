@@ -1,7 +1,625 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, markRaw, reactive, ref, onMounted, watch } from 'vue'
+import { VueFlow, useVueFlow, SelectionMode } from '@vue-flow/core'
+import '@vue-flow/core/dist/style.css'
+import '@vue-flow/core/dist/theme-default.css'
+import { useWorldStore, type DrawingItem } from '../stores/world'
+import WorldCard from '../components/WorldCard.vue'
+import CenterEdge from '../components/CenterEdge.vue'
+import ObjectDetailPanel from '../components/ObjectDetailPanel.vue'
 
+const store = useWorldStore()
+const vueFlowRef = ref<InstanceType<typeof VueFlow>>()
+const drawingCanvasRef = ref<HTMLCanvasElement | null>(null)
+const canvasCtx = ref<CanvasRenderingContext2D | null>(null)
+const { findNode, screenToFlowCoordinate, getSelectedNodes, getSelectedEdges, viewport, onViewportChange } = useVueFlow()
+
+const nodeTypes = { 'world-card': markRaw(WorldCard) } as any
+const edgeTypes = { 'center-edge': markRaw(CenterEdge) } as any
+
+// ---- 左侧面板 Tab ----
 const leftTab = ref<'entries' | 'canvases'>('entries')
+
+// ---- 条目面板状态 ----
+const expandedCategories = ref<Set<string>>(new Set(store.categories.map((c) => c.id)))
+const newCategoryName = ref('')
+const showNewCategory = ref(false)
+const newObjectCategoryId = ref<string | null>(null)
+const newObjectName = ref('')
+const renamingCategoryId = ref<string | null>(null)
+const renamingObjectId = ref<string | null>(null)
+const editingObjectColorId = ref<string | null>(null)
+const editingCategoryColorId = ref<string | null>(null)
+
+function toggleCategory(id: string) {
+  if (expandedCategories.value.has(id)) {
+    expandedCategories.value.delete(id)
+  } else {
+    expandedCategories.value.add(id)
+  }
+}
+
+function handleAddCategory() {
+  const name = newCategoryName.value.trim()
+  if (!name) return
+  const cat = store.addCategory(name)
+  expandedCategories.value.add(cat.id)
+  newCategoryName.value = ''
+  showNewCategory.value = false
+}
+
+function startRenameCategory(id: string) {
+  renamingCategoryId.value = id
+}
+
+function finishRenameCategory(id: string, event: Event) {
+  const input = event.target as HTMLInputElement
+  if (input && input.value.trim()) {
+    store.renameCategory(id, input.value.trim())
+  }
+  renamingCategoryId.value = null
+}
+
+function handleCategoryColorChange(id: string, event: Event) {
+  const input = event.target as HTMLInputElement
+  if (input && input.value) {
+    store.updateCategoryColor(id, input.value)
+  }
+  editingCategoryColorId.value = null
+}
+
+function startNewObject(categoryId: string) {
+  newObjectCategoryId.value = categoryId
+  newObjectName.value = ''
+}
+
+function handleCreateObject() {
+  if (!newObjectCategoryId.value) return
+  const name = newObjectName.value.trim() || '新对象'
+  store.createObject(newObjectCategoryId.value, name)
+  newObjectCategoryId.value = null
+  newObjectName.value = ''
+}
+
+function startRenameObject(id: string) {
+  renamingObjectId.value = id
+}
+
+function finishRenameObject(id: string, event: Event) {
+  const input = event.target as HTMLInputElement
+  if (input && input.value.trim()) {
+    store.renameObject(id, input.value.trim())
+  }
+  renamingObjectId.value = null
+}
+
+function handleObjectColorChange(id: string, event: Event) {
+  const input = event.target as HTMLInputElement
+  if (input && input.value) {
+    store.updateObjectColor(id, input.value)
+  }
+  editingObjectColorId.value = null
+}
+
+function clearObjectColor(id: string) {
+  store.updateObjectColor(id, undefined)
+}
+
+function onObjectDragStart(e: DragEvent, objectId: string) {
+  e.dataTransfer!.setData('world-object-id', objectId)
+  e.dataTransfer!.effectAllowed = 'copy'
+}
+
+// ---- 画布面板状态 ----
+const renamingCanvasId = ref<string | null>(null)
+
+const activeCanvasName = computed(() => {
+  if (!store.activeCanvasId) return '未命名画布'
+  const c = store.canvases.find((c) => c.id === store.activeCanvasId)
+  return c?.name ?? '未命名画布'
+})
+
+function handleNewCanvas() {
+  store.requestAction(() => {
+    store.newCanvas()
+    leftTab.value = 'entries'
+  })
+}
+
+function handleOpenCanvas(id: string) {
+  store.requestAction(() => store.openCanvas(id))
+}
+
+function startRenameCanvas(id: string) {
+  renamingCanvasId.value = id
+}
+
+function finishRenameCanvas(id: string, event: Event) {
+  const input = event.target as HTMLInputElement
+  if (input && input.value.trim()) {
+    store.renameCanvas(id, input.value.trim())
+  }
+  renamingCanvasId.value = null
+}
+
+// ---- VueFlow nodes/edges ----
+const nodes = computed(() =>
+  store.cards.map((card) => ({
+    id: card.id,
+    type: 'world-card',
+    position: { x: card.x, y: card.y },
+    data: { objectId: card.objectId },
+  })),
+)
+
+const edges = computed(() =>
+  store.edges.map((edge) => ({
+    id: edge.id,
+    source: edge.source,
+    target: edge.target,
+    sourceHandle: 'source',
+    targetHandle: 'target',
+    type: 'center-edge',
+  })),
+)
+
+// ---- 绘图工具 ----
+const drawingTools = [
+  { type: 'line', label: '直线', icon: '─' },
+  { type: 'arrow', label: '箭头', icon: '→' },
+  { type: 'rect', label: '矩形', icon: '▢' },
+  { type: 'circle', label: '圆形', icon: '○' },
+  { type: 'triangle', label: '三角形', icon: '△' },
+  { type: 'brace', label: '大括号', icon: '{' },
+  { type: 'pencil', label: '手绘', icon: '✏' },
+]
+
+function switchDrawingTool(toolType: string) {
+  store.activeDrawingTool = store.activeDrawingTool === toolType ? null : toolType
+}
+
+function startDrawing(e: MouseEvent, toolType: string) {
+  if (!store.activeDrawingTool) return
+  e.preventDefault()
+  const pos = screenToFlowCoordinate({ x: e.clientX, y: e.clientY })
+  store.isDrawing = true
+  const points = toolType === 'pencil' ? [pos] : [pos, pos]
+  store.drawingPreview = {
+    id: `draw-${Date.now()}`,
+    type: toolType as any,
+    color: store.drawingConfig.color,
+    lineWidth: store.drawingConfig.lineWidth,
+    points,
+  }
+  window.addEventListener('mousemove', onDrawingMouseMove)
+  window.addEventListener('mouseup', onDrawingMouseUp)
+}
+
+function onDrawingMouseMove(e: MouseEvent) {
+  if (!store.isDrawing || !store.drawingPreview) return
+  const pos = screenToFlowCoordinate({ x: e.clientX, y: e.clientY })
+  if (store.drawingPreview.type === 'pencil') {
+    store.drawingPreview.points.push(pos)
+  } else {
+    store.drawingPreview.points[1] = pos
+  }
+}
+
+function onDrawingMouseUp() {
+  finishDrawing()
+  window.removeEventListener('mousemove', onDrawingMouseMove)
+  window.removeEventListener('mouseup', onDrawingMouseUp)
+}
+
+function finishDrawing() {
+  if (store.isDrawing && store.drawingPreview) {
+    store.drawings.push(store.drawingPreview)
+    store.dirty = true
+  }
+  store.isDrawing = false
+  store.drawingPreview = null
+}
+
+function onDrawingOverlayDown(e: MouseEvent) {
+  if (store.activeDrawingTool) {
+    startDrawing(e, store.activeDrawingTool)
+  }
+}
+
+// ---- 右键状态机 ----
+// idle → pending (mousedown) → connecting (移动超阈值) / contextMenu (松手未超阈值)
+const rightClick = reactive({
+  state: 'idle' as 'idle' | 'pending' | 'connecting',
+  sourceId: '',
+  sourceX: 0,
+  sourceY: 0,
+  cursorX: 0,
+  cursorY: 0,
+  startX: 0,
+  startY: 0,
+})
+const DRAG_THRESHOLD = 5
+
+// 上下文菜单
+const contextMenu = reactive({
+  visible: false,
+  x: 0,
+  y: 0,
+  type: '' as 'node' | 'edge' | '',
+  targetId: '',
+  showColorPicker: false,
+})
+
+function onCanvasRightDown(e: MouseEvent) {
+  // 通过 hit test 判断右键点中了哪个节点
+  const flowPos = screenToFlowCoordinate({ x: e.clientX, y: e.clientY })
+  let hitNodeId = ''
+  for (const card of store.cards) {
+    const node = findNode(card.id)
+    if (!node) continue
+    const w = node.dimensions?.width ?? 220
+    const h = node.dimensions?.height ?? 120
+    if (
+      flowPos.x >= node.position.x &&
+      flowPos.x <= node.position.x + w &&
+      flowPos.y >= node.position.y &&
+      flowPos.y <= node.position.y + h
+    ) {
+      hitNodeId = card.id
+      break
+    }
+  }
+  if (!hitNodeId) return
+  e.preventDefault()
+  const src = findNode(hitNodeId)
+  if (!src) return
+  rightClick.state = 'pending'
+  rightClick.sourceId = hitNodeId
+  rightClick.sourceX = src.position.x + (src.dimensions?.width ?? 220) / 2
+  rightClick.sourceY = src.position.y + (src.dimensions?.height ?? 120) / 2
+  rightClick.cursorX = rightClick.sourceX
+  rightClick.cursorY = rightClick.sourceY
+  rightClick.startX = e.clientX
+  rightClick.startY = e.clientY
+  window.addEventListener('mousemove', onRightClickMove)
+  window.addEventListener('mouseup', onRightClickUp)
+}
+
+function onRightClickMove(e: MouseEvent) {
+  if (rightClick.state === 'pending') {
+    const dx = e.clientX - rightClick.startX
+    const dy = e.clientY - rightClick.startY
+    if (Math.sqrt(dx * dx + dy * dy) > DRAG_THRESHOLD) {
+      rightClick.state = 'connecting'
+    }
+  }
+  if (rightClick.state === 'connecting') {
+    const pos = screenToFlowCoordinate({ x: e.clientX, y: e.clientY })
+    rightClick.cursorX = pos.x
+    rightClick.cursorY = pos.y
+  }
+}
+
+function onRightClickUp(e: MouseEvent) {
+  window.removeEventListener('mousemove', onRightClickMove)
+  window.removeEventListener('mouseup', onRightClickUp)
+  if (rightClick.state === 'connecting') {
+    finishConnecting(e.clientX, e.clientY)
+  } else if (rightClick.state === 'pending') {
+    showContextMenu(rightClick.sourceId, 'node', rightClick.startX, rightClick.startY)
+  }
+  rightClick.state = 'idle'
+}
+
+function finishConnecting(clientX: number, clientY: number) {
+  const pos = screenToFlowCoordinate({ x: clientX, y: clientY })
+  let targetId = ''
+  for (const card of store.cards) {
+    const node = findNode(card.id)
+    if (!node) continue
+    const w = node.dimensions?.width ?? 220
+    const h = node.dimensions?.height ?? 120
+    if (
+      pos.x >= node.position.x &&
+      pos.x <= node.position.x + w &&
+      pos.y >= node.position.y &&
+      pos.y <= node.position.y + h
+    ) {
+      targetId = card.id
+      break
+    }
+  }
+  if (targetId && targetId !== rightClick.sourceId) {
+    store.addEdge(rightClick.sourceId, targetId)
+  }
+}
+
+function showContextMenu(targetId: string, type: 'node' | 'edge', x: number, y: number) {
+  contextMenu.visible = true
+  contextMenu.x = x
+  contextMenu.y = y
+  contextMenu.type = type
+  contextMenu.targetId = targetId
+  contextMenu.showColorPicker = false
+}
+
+function onEdgeContextMenu({ event, edge }: { event: any; edge: { id: string } }) {
+  event.preventDefault()
+  showContextMenu(edge.id, 'edge', event.clientX, event.clientY)
+}
+
+function closeContextMenu() {
+  contextMenu.visible = false
+  contextMenu.showColorPicker = false
+}
+
+// ---- 拖入对象 ----
+function onDrop(event: DragEvent) {
+  const objectId = event.dataTransfer?.getData('world-object-id')
+  if (!objectId || !vueFlowRef.value) return
+  const position = vueFlowRef.value.screenToFlowCoordinate({
+    x: event.clientX,
+    y: event.clientY,
+  })
+  store.addCard(objectId, position.x - 110, position.y - 20)
+}
+
+function onNodeDragStop({ node }: { node: { id: string; position: { x: number; y: number } } }) {
+  store.updateCardPosition(node.id, node.position.x, node.position.y)
+}
+
+// ---- 双击创建自由文本 ----
+let lastPaneClickTime = 0
+
+function onPaneClick(event: MouseEvent) {
+  const now = Date.now()
+  if (now - lastPaneClickTime < 350) {
+    const pos = screenToFlowCoordinate({ x: event.clientX, y: event.clientY })
+    // 在未分类下创建自由文本对象
+    const uncat = store.categories.find((c) => c.name === '未分类')
+    if (uncat) {
+      const obj = store.createObject(uncat.id, '自由文本')
+      store.addCard(obj.id, pos.x - 110, pos.y - 20)
+    }
+  }
+  lastPaneClickTime = now
+}
+
+// ---- 右键菜单 ----
+const contextMenu = reactive({
+  visible: false,
+  x: 0,
+  y: 0,
+  type: '' as 'node' | 'edge' | '',
+  targetId: '',
+  showColorPicker: false,
+})
+
+function closeContextMenu() {
+  contextMenu.visible = false
+  contextMenu.showColorPicker = false
+}
+
+// ---- 上下文菜单项 ----
+interface ContextMenuItem {
+  label: string
+  danger?: boolean
+  action: () => void
+}
+
+const contextMenuItems = computed<ContextMenuItem[]>(() => {
+  if (contextMenu.type === 'node') {
+    return [
+      { label: '修改颜色', action: () => { contextMenu.showColorPicker = true } },
+      { label: '删除', danger: true, action: () => { store.removeCard(contextMenu.targetId); closeContextMenu() } },
+    ]
+  }
+  if (contextMenu.type === 'edge') {
+    return [
+      { label: '删除', danger: true, action: () => { store.removeEdge(contextMenu.targetId); closeContextMenu() } },
+    ]
+  }
+  return []
+})
+
+function onCardColorInput(e: Event) {
+  const input = e.target as HTMLInputElement
+  if (input && input.value) {
+    store.updateCardColor(contextMenu.targetId, input.value)
+  }
+}
+
+function resetCardColor() {
+  store.updateCardColor(contextMenu.targetId, undefined)
+  contextMenu.showColorPicker = false
+}
+
+// ---- 键盘 ----
+function onKeyDown(e: KeyboardEvent) {
+  if (e.key === 'Delete' || e.key === 'Backspace') {
+    const selectedNodes = getSelectedNodes.value
+    const selectedEdges = getSelectedEdges.value
+    if (selectedNodes.length > 0) {
+      for (const n of selectedNodes) store.removeCard(n.id)
+      e.preventDefault()
+    } else if (selectedEdges.length > 0) {
+      for (const ed of selectedEdges) store.removeEdge(ed.id)
+      e.preventDefault()
+    }
+  }
+  if (e.key === 'F2') {
+    e.preventDefault()
+    if (store.activeCanvasId) {
+      renamingCanvasId.value = store.activeCanvasId
+    }
+  }
+}
+
+// ---- 绘图层渲染 ----
+onMounted(() => {
+  if (drawingCanvasRef.value) {
+    canvasCtx.value = drawingCanvasRef.value.getContext('2d')
+    window.addEventListener('resize', () => {
+      if (drawingCanvasRef.value && vueFlowRef.value) {
+        const container = vueFlowRef.value.$el as HTMLElement
+        drawingCanvasRef.value.width = container.clientWidth
+        drawingCanvasRef.value.height = container.clientHeight
+        renderDrawings()
+      }
+    })
+    setTimeout(() => window.dispatchEvent(new Event('resize')), 100)
+  }
+  onViewportChange(() => {
+    renderDrawings()
+  })
+})
+
+function renderDrawings() {
+  if (!canvasCtx.value || !drawingCanvasRef.value) return
+  const { x, y, zoom } = viewport.value
+  canvasCtx.value.clearRect(0, 0, drawingCanvasRef.value.width, drawingCanvasRef.value.height)
+  canvasCtx.value.save()
+  canvasCtx.value.translate(x, y)
+  canvasCtx.value.scale(zoom, zoom)
+  for (const draw of store.drawings) {
+    renderDrawingItem(draw)
+  }
+  if (store.drawingPreview) {
+    renderDrawingItem(store.drawingPreview)
+  }
+  canvasCtx.value.restore()
+}
+
+function renderDrawingItem(item: DrawingItem) {
+  if (!canvasCtx.value) return
+  canvasCtx.value.strokeStyle = item.color
+  canvasCtx.value.lineWidth = item.lineWidth
+  canvasCtx.value.lineCap = 'round'
+  canvasCtx.value.lineJoin = 'round'
+
+  switch (item.type) {
+    case 'line':
+      canvasCtx.value.beginPath()
+      canvasCtx.value.moveTo(item.points[0].x, item.points[0].y)
+      canvasCtx.value.lineTo(item.points[1].x, item.points[1].y)
+      canvasCtx.value.stroke()
+      break
+
+    case 'arrow':
+      if (item.points.length >= 2) {
+        const headLen = 16
+        const angle = Math.atan2(
+          item.points[1].y - item.points[0].y,
+          item.points[1].x - item.points[0].x,
+        )
+        const lineEnd = {
+          x: item.points[1].x - headLen * Math.cos(angle),
+          y: item.points[1].y - headLen * Math.sin(angle),
+        }
+        canvasCtx.value.beginPath()
+        canvasCtx.value.moveTo(item.points[0].x, item.points[0].y)
+        canvasCtx.value.lineTo(lineEnd.x, lineEnd.y)
+        canvasCtx.value.stroke()
+        drawArrowHead(item.points[1], angle, headLen)
+      }
+      break
+
+    case 'rect':
+      if (item.points.length >= 2) {
+        const x = Math.min(item.points[0].x, item.points[1].x)
+        const y = Math.min(item.points[0].y, item.points[1].y)
+        const width = Math.abs(item.points[1].x - item.points[0].x)
+        const height = Math.abs(item.points[1].y - item.points[0].y)
+        canvasCtx.value.strokeRect(x, y, width, height)
+      }
+      break
+
+    case 'circle':
+      if (item.points.length >= 2) {
+        const cx = (item.points[0].x + item.points[1].x) / 2
+        const cy = (item.points[0].y + item.points[1].y) / 2
+        const rx = Math.abs(item.points[1].x - item.points[0].x) / 2
+        const ry = Math.abs(item.points[1].y - item.points[0].y) / 2
+        canvasCtx.value.beginPath()
+        canvasCtx.value.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2)
+        canvasCtx.value.stroke()
+      }
+      break
+
+    case 'triangle':
+      if (item.points.length >= 2) {
+        const dx = item.points[1].x - item.points[0].x
+        const dy = item.points[1].y - item.points[0].y
+        canvasCtx.value.beginPath()
+        canvasCtx.value.moveTo(item.points[0].x, item.points[0].y)
+        canvasCtx.value.lineTo(item.points[1].x, item.points[1].y)
+        canvasCtx.value.lineTo(
+          item.points[0].x + dx / 2 - dy * 0.433,
+          item.points[0].y + dy / 2 + dx * 0.433,
+        )
+        canvasCtx.value.closePath()
+        canvasCtx.value.stroke()
+      }
+      break
+
+    case 'brace':
+      if (item.points.length >= 2) {
+        const x = Math.min(item.points[0].x, item.points[1].x)
+        const y = Math.min(item.points[0].y, item.points[1].y)
+        const w = Math.abs(item.points[1].x - item.points[0].x)
+        const h = Math.abs(item.points[1].y - item.points[0].y)
+        if (w > 10 && h > 10) {
+          canvasCtx.value.font = `${h}px sans-serif`
+          const metrics = canvasCtx.value.measureText('{')
+          const glyphH =
+            (metrics.actualBoundingBoxAscent ?? 0) + (metrics.actualBoundingBoxDescent ?? 0)
+          const glyphW = metrics.width
+          const scale = Math.min(w / glyphW, h / glyphH)
+          const fontSize = h * scale
+          canvasCtx.value.font = `${fontSize}px sans-serif`
+          canvasCtx.value.textBaseline = 'top'
+          canvasCtx.value.textAlign = 'center'
+          canvasCtx.value.fillStyle = item.color
+          canvasCtx.value.fillText('{', x + w / 2, y + (h - fontSize) / 2)
+        }
+      }
+      break
+
+    case 'pencil':
+      if (item.points.length >= 2) {
+        canvasCtx.value.beginPath()
+        canvasCtx.value.moveTo(item.points[0].x, item.points[0].y)
+        for (let i = 1; i < item.points.length; i++) {
+          canvasCtx.value.lineTo(item.points[i].x, item.points[i].y)
+        }
+        canvasCtx.value.stroke()
+      }
+      break
+  }
+}
+
+function drawArrowHead(
+  tip: { x: number; y: number },
+  angle: number,
+  headLength: number,
+) {
+  if (!canvasCtx.value) return
+  const x1 = tip.x - headLength * Math.cos(angle - Math.PI / 4)
+  const y1 = tip.y - headLength * Math.sin(angle - Math.PI / 4)
+  const x2 = tip.x - headLength * Math.cos(angle + Math.PI / 4)
+  const y2 = tip.y - headLength * Math.sin(angle + Math.PI / 4)
+  canvasCtx.value.beginPath()
+  canvasCtx.value.moveTo(x1, y1)
+  canvasCtx.value.lineTo(tip.x, tip.y)
+  canvasCtx.value.lineTo(x2, y2)
+  canvasCtx.value.closePath()
+  canvasCtx.value.fillStyle = canvasCtx.value.strokeStyle
+  canvasCtx.value.fill()
+}
+
+watch([() => store.drawings, () => store.drawingPreview], () => {
+  renderDrawings()
+}, { deep: true })
 </script>
 
 <template>
@@ -28,19 +646,312 @@ const leftTab = ref<'entries' | 'canvases'>('entries')
 
       <!-- 条目 Tab -->
       <div v-show="leftTab === 'entries'" class="flex-1 overflow-y-auto">
-        <div class="p-3 text-zinc-600 text-sm">暂无条目</div>
+        <div v-for="cat in store.categories" :key="cat.id" class="border-b border-zinc-800/50">
+          <div
+            class="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-zinc-800/40 transition-colors select-none"
+            @click="toggleCategory(cat.id)"
+          >
+            <span class="text-xs text-zinc-500 transition-transform" :class="expandedCategories.has(cat.id) ? 'rotate-90' : ''">&#9654;</span>
+            <span
+              class="w-3 h-3 rounded-full flex-shrink-0 cursor-pointer"
+              :style="{ background: cat.color }"
+              @click.stop="editingCategoryColorId = editingCategoryColorId === cat.id ? null : cat.id"
+            ></span>
+            <input
+              v-if="renamingCategoryId === cat.id"
+              :value="cat.name"
+              class="flex-1 bg-zinc-800 text-sm text-zinc-200 px-1 py-0.5 rounded border border-zinc-600 outline-none min-w-0"
+              @keydown.enter="finishRenameCategory(cat.id, $event)"
+              @blur="finishRenameCategory(cat.id, $event)"
+              @click.stop
+            />
+            <span v-else class="flex-1 text-sm text-zinc-300 truncate">{{ cat.name }}</span>
+            <span class="text-xs text-zinc-600">{{ store.getObjectsByCategory(cat.id).length }}</span>
+            <div class="flex items-center gap-1 flex-shrink-0" @click.stop>
+              <button class="text-zinc-600 hover:text-zinc-300 text-xs" title="重命名" @click="startRenameCategory(cat.id)">&#9998;</button>
+              <button v-if="cat.name !== '未分类'" class="text-zinc-600 hover:text-red-400 text-xs" title="删除目录" @click="store.deleteCategory(cat.id)">&#10005;</button>
+            </div>
+          </div>
+          <div v-if="editingCategoryColorId === cat.id" class="px-3 pb-2" @click.stop>
+            <input
+              type="color"
+              :value="cat.color"
+              class="w-full h-7 rounded cursor-pointer bg-transparent border border-zinc-700"
+              @input="handleCategoryColorChange(cat.id, $event)"
+              @change="handleCategoryColorChange(cat.id, $event)"
+            />
+          </div>
+          <div v-show="expandedCategories.has(cat.id)">
+            <div
+              v-for="obj in store.getObjectsByCategory(cat.id)"
+              :key="obj.id"
+              draggable="true"
+              class="flex items-center gap-2 px-3 pl-8 py-1.5 cursor-grab hover:bg-zinc-800/40 transition-colors active:cursor-grabbing group"
+              @dragstart="onObjectDragStart($event, obj.id)"
+              @dblclick="store.openDetail(obj.id)"
+            >
+              <span class="w-2 h-2 rounded-full flex-shrink-0" :style="{ background: obj.color ?? cat.color }"></span>
+              <input
+                v-if="renamingObjectId === obj.id"
+                :value="obj.name"
+                class="flex-1 bg-zinc-800 text-sm text-zinc-200 px-1 py-0.5 rounded border border-zinc-600 outline-none min-w-0"
+                @keydown.enter="finishRenameObject(obj.id, $event)"
+                @blur="finishRenameObject(obj.id, $event)"
+                @click.stop @mousedown.stop @pointerdown.stop
+              />
+              <span v-else class="flex-1 text-sm text-zinc-400 truncate">{{ obj.name }}</span>
+              <div class="flex items-center gap-1 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" @click.stop>
+                <button class="text-zinc-600 hover:text-zinc-300 text-xs" title="对象颜色" @click="editingObjectColorId = editingObjectColorId === obj.id ? null : obj.id">&#9673;</button>
+                <button class="text-zinc-600 hover:text-zinc-300 text-xs" title="重命名" @click="startRenameObject(obj.id)">&#9998;</button>
+                <button class="text-zinc-600 hover:text-red-400 text-xs" title="删除" @click="store.deleteObject(obj.id)">&#10005;</button>
+              </div>
+            </div>
+            <div v-if="editingObjectColorId && store.getObjectById(editingObjectColorId)?.categoryId === cat.id" class="px-3 pl-8 pb-2" @click.stop>
+              <div class="flex items-center gap-2">
+                <input
+                  type="color"
+                  :value="store.getObjectById(editingObjectColorId!)?.color ?? cat.color"
+                  class="w-8 h-6 rounded cursor-pointer bg-transparent border border-zinc-700"
+                  @input="handleObjectColorChange(editingObjectColorId!, $event)"
+                  @change="handleObjectColorChange(editingObjectColorId!, $event)"
+                />
+                <button class="text-xs text-zinc-500 hover:text-zinc-300" @click="clearObjectColor(editingObjectColorId!)">使用目录颜色</button>
+              </div>
+            </div>
+            <div v-if="newObjectCategoryId === cat.id" class="px-3 pl-8 pb-2">
+              <input
+                v-model="newObjectName"
+                class="w-full bg-zinc-800 text-sm text-zinc-200 px-2 py-1 rounded border border-zinc-600 outline-none"
+                placeholder="对象名称"
+                @keydown.enter="handleCreateObject"
+                @keydown.escape="newObjectCategoryId = null"
+                @blur="handleCreateObject"
+              />
+            </div>
+            <div class="px-3 pl-8 py-1">
+              <button class="text-xs text-zinc-600 hover:text-zinc-400 transition-colors" @click="startNewObject(cat.id)">+ 新建对象</button>
+            </div>
+          </div>
+        </div>
+        <div class="p-2 border-t border-zinc-800/50">
+          <div v-if="showNewCategory" class="flex gap-2">
+            <input
+              v-model="newCategoryName"
+              class="flex-1 bg-zinc-800 text-sm text-zinc-200 px-2 py-1 rounded border border-zinc-600 outline-none min-w-0"
+              placeholder="目录名称"
+              @keydown.enter="handleAddCategory"
+              @keydown.escape="showNewCategory = false"
+              @blur="handleAddCategory"
+            />
+          </div>
+          <button v-else class="w-full h-8 rounded bg-zinc-800 hover:bg-zinc-700 text-sm text-zinc-400 transition-colors" @click="showNewCategory = true">
+            + 新建目录
+          </button>
+        </div>
       </div>
 
       <!-- 画布 Tab -->
       <div v-show="leftTab === 'canvases'" class="flex-1 overflow-y-auto">
-        <div class="p-3 text-zinc-600 text-sm">暂无画布</div>
+        <div class="p-2">
+          <button class="w-full h-9 rounded bg-zinc-800 hover:bg-zinc-700 text-sm text-zinc-300 transition-colors" @click="handleNewCanvas()">
+            + 新建画布
+          </button>
+        </div>
+        <div
+          v-for="canvas in store.canvases"
+          :key="canvas.id"
+          class="flex items-center gap-2 px-3 py-2.5 border-b border-zinc-800/50 cursor-pointer hover:bg-zinc-800/40 transition-colors"
+          :class="{ 'bg-zinc-800/60': store.activeCanvasId === canvas.id }"
+          @click="handleOpenCanvas(canvas.id)"
+          @dblclick.stop="startRenameCanvas(canvas.id)"
+        >
+          <div class="flex-1 min-w-0">
+            <input
+              v-if="renamingCanvasId === canvas.id"
+              :value="canvas.name"
+              class="w-full bg-zinc-800 text-sm text-zinc-200 px-1 py-0.5 rounded border border-zinc-600 outline-none"
+              @keydown.enter="finishRenameCanvas(canvas.id, $event)"
+              @blur="finishRenameCanvas(canvas.id, $event)"
+              @click.stop
+            />
+            <template v-else>
+              <div class="text-sm text-zinc-300 truncate">{{ canvas.name }}</div>
+              <div class="text-xs text-zinc-600 mt-0.5">{{ canvas.cards.length }} 张卡片</div>
+            </template>
+          </div>
+          <button
+            v-if="renamingCanvasId !== canvas.id"
+            class="text-zinc-600 hover:text-red-400 transition-colors text-xs flex-shrink-0"
+            title="删除画布"
+            @click.stop="store.deleteCanvas(canvas.id)"
+          >&#10005;</button>
+        </div>
+        <div v-if="store.canvases.length === 0" class="px-3 py-6 text-center text-zinc-600 text-sm">
+          暂无保存的画布
+        </div>
       </div>
     </aside>
 
     <!-- 右侧画布区 -->
-    <main class="flex-1 bg-zinc-900 flex items-center justify-center">
-      <div class="text-zinc-600 text-sm">选择或新建一个画布开始</div>
+    <main class="flex-1 bg-zinc-900 flex flex-col min-w-0">
+      <header class="h-10 flex items-center justify-between px-3 border-b border-zinc-800 flex-shrink-0">
+        <span class="text-sm text-zinc-400 tracking-wide">{{ activeCanvasName }}</span>
+        <div class="flex items-center gap-2">
+          <span v-if="store.dirty" class="text-xs text-zinc-500">未保存</span>
+          <button
+            class="px-3 h-7 rounded text-xs transition-colors"
+            :class="store.dirty ? 'bg-violet-600 hover:bg-violet-500 text-white' : 'bg-zinc-800 text-zinc-500'"
+            @click="store.saveCurrentCanvas()"
+          >
+            保存
+          </button>
+        </div>
+      </header>
+      <div
+        class="flex-1 relative outline-none"
+        @dragover.prevent
+        @drop="onDrop"
+        @mousedown.right="onCanvasRightDown"
+        @click="closeContextMenu"
+        @keydown="onKeyDown"
+        tabindex="0"
+      >
+        <VueFlow
+          ref="vueFlowRef"
+          v-model:nodes="nodes"
+          :edges="edges"
+          :node-types="nodeTypes"
+          :edge-types="edgeTypes"
+          :default-viewport="{ x: 0, y: 0, zoom: 1 }"
+          :connect-on-click="false"
+          :delete-key-code="null"
+          :selection-mode="SelectionMode.Partial"
+          :select-on-click="!store.activeDrawingTool"
+          :draggable="!store.activeDrawingTool"
+          :zoom-on-pan="!store.activeDrawingTool"
+          :pan-on-drag="!store.activeDrawingTool"
+          class="world-flow"
+          @node-drag-stop="onNodeDragStop"
+          @edge-context-menu="onEdgeContextMenu"
+          @pane-click="onPaneClick"
+          @contextmenu.prevent
+        >
+          <!-- 右键连线临时线 -->
+          <svg
+            v-if="rightClick.state === 'connecting'"
+            style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible;"
+          >
+            <path
+              :d="`M${rightClick.sourceX},${rightClick.sourceY} L${rightClick.cursorX},${rightClick.cursorY}`"
+              fill="none"
+              stroke="#a78bfa"
+              stroke-width="2"
+              stroke-dasharray="6 4"
+            />
+          </svg>
+
+          <!-- 绘图工具栏 -->
+          <div class="drawing-toolbar absolute bottom-6 right-6 bg-zinc-900 border border-zinc-800 rounded-lg p-2 flex flex-col gap-1 z-50">
+            <button
+              v-for="tool in drawingTools"
+              :key="tool.type"
+              class="w-8 h-8 flex items-center justify-center rounded hover:bg-zinc-800 transition-colors text-sm"
+              :class="store.activeDrawingTool === tool.type ? 'bg-violet-600 text-white' : 'text-zinc-400'"
+              @click.stop="switchDrawingTool(tool.type)"
+              :title="tool.label"
+            >
+              {{ tool.icon }}
+            </button>
+            <div class="w-full h-px bg-zinc-800 my-1"></div>
+            <input type="color" v-model="store.drawingConfig.color" class="w-8 h-8 rounded border-0 cursor-pointer" title="线条颜色" />
+            <div class="w-full h-px bg-zinc-800 my-1"></div>
+            <input type="range" v-model="store.drawingConfig.lineWidth" min="1" max="10" class="w-8 h-12 -rotate-90 origin-center" title="线条宽度" />
+          </div>
+
+          <!-- 绘图层 Canvas -->
+          <canvas
+            ref="drawingCanvasRef"
+            style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10;"
+          />
+
+          <!-- 绘图交互层 -->
+          <div
+            v-if="store.activeDrawingTool"
+            style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 20; cursor: crosshair;"
+            @mousedown="onDrawingOverlayDown"
+          />
+
+          <template #pane>
+            <div v-if="store.cards.length === 0" class="absolute inset-0 flex items-center justify-center text-zinc-700 text-sm pointer-events-none">
+              从左侧拖入对象到画布
+            </div>
+          </template>
+        </VueFlow>
+      </div>
     </main>
+
+    <!-- 对象详情弹窗 -->
+    <ObjectDetailPanel
+      v-for="detail in store.openDetails"
+      :key="detail.objectId"
+      :detail="detail"
+    />
+
+    <!-- 右键菜单 -->
+    <div
+      v-if="contextMenu.visible"
+      class="fixed z-50 bg-zinc-900 border border-zinc-700 rounded-lg py-1 shadow-xl min-w-28"
+      :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }"
+      @click.stop
+    >
+      <template v-for="(item, idx) in contextMenuItems" :key="idx">
+        <button
+          class="w-full px-4 py-1.5 text-left text-sm hover:bg-zinc-800 transition-colors"
+          :class="item.danger ? 'text-red-400' : 'text-zinc-300'"
+          @click="item.action"
+        >
+          {{ item.label }}
+        </button>
+        <div
+          v-if="item.label === '修改颜色' && contextMenu.showColorPicker"
+          class="px-3 py-2 flex items-center gap-2"
+          @click.stop @mousedown.stop @pointerdown.stop
+        >
+          <input
+            type="color"
+            :value="store.cards.find(c => c.id === contextMenu.targetId)?.color ?? store.resolveCardColor(contextMenu.targetId)"
+            class="w-8 h-6 rounded cursor-pointer bg-transparent border border-zinc-700"
+            @input="onCardColorInput"
+            @change="onCardColorInput"
+          />
+          <button class="text-xs text-zinc-500 hover:text-zinc-300" @click="resetCardColor">重置</button>
+        </div>
+      </template>
+    </div>
+
+    <!-- 未保存确认弹窗 -->
+    <div
+      v-if="store.confirmDialog"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
+    >
+      <div class="bg-zinc-900 border border-zinc-700 rounded-lg p-6 w-80 shadow-xl">
+        <div class="text-sm text-zinc-200 mb-1">画布有未保存的改动</div>
+        <div class="text-xs text-zinc-500 mb-5">离开前是否保存当前画布？</div>
+        <div class="flex gap-3">
+          <button class="flex-1 h-8 rounded bg-violet-600 hover:bg-violet-500 text-white text-xs transition-colors" @click="store.confirmSave()">保存</button>
+          <button class="flex-1 h-8 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs transition-colors" @click="store.confirmDiscard()">不保存</button>
+          <button class="flex-1 h-8 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-500 text-xs transition-colors" @click="store.confirmCancel()">取消</button>
+        </div>
+      </div>
+    </div>
 
   </div>
 </template>
+
+<style scoped>
+.world-flow {
+  width: 100%;
+  height: 100%;
+  background: #18181b;
+}
+</style>

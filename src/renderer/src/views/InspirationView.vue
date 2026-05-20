@@ -11,7 +11,7 @@ const store = useInspirationStore()
 const vueFlowRef = ref<InstanceType<typeof VueFlow>>()
 const drawingCanvasRef = ref<HTMLCanvasElement | null>(null)
 const canvasCtx = ref<CanvasRenderingContext2D | null>(null)
-const { findNode, screenToFlowCoordinate, getSelectedNodes, getSelectedEdges } = useVueFlow()
+const { findNode, screenToFlowCoordinate, getSelectedNodes, getSelectedEdges, viewport, onViewportChange } = useVueFlow()
 
 const nodeTypes = { 'inspiration-card': markRaw(InspirationCard) } as any
 const edgeTypes = { 'center-edge': markRaw(CenterEdge) } as any
@@ -298,35 +298,36 @@ function deleteContextTarget() {
 onMounted(() => {
   if (drawingCanvasRef.value) {
     canvasCtx.value = drawingCanvasRef.value.getContext('2d')
-    // 监听画布大小变化
     window.addEventListener('resize', () => {
       if (drawingCanvasRef.value && vueFlowRef.value) {
         const container = vueFlowRef.value.$el as HTMLElement
         drawingCanvasRef.value.width = container.clientWidth
         drawingCanvasRef.value.height = container.clientHeight
+        renderDrawings()
       }
     })
-    // 初始大小
     setTimeout(() => window.dispatchEvent(new Event('resize')), 100)
   }
+  onViewportChange(() => {
+    renderDrawings()
+  })
 })
 
 // 渲染绘图元素
 function renderDrawings() {
   if (!canvasCtx.value || !drawingCanvasRef.value) return
-
-  // 清空画布
+  const { x, y, zoom } = viewport.value
   canvasCtx.value.clearRect(0, 0, drawingCanvasRef.value.width, drawingCanvasRef.value.height)
-
-  // 渲染所有已完成的绘图
+  canvasCtx.value.save()
+  canvasCtx.value.translate(x, y)
+  canvasCtx.value.scale(zoom, zoom)
   for (const draw of store.drawings) {
     renderDrawingItem(draw)
   }
-
-  // 渲染当前预览的绘图
   if (store.drawingPreview) {
     renderDrawingItem(store.drawingPreview)
   }
+  canvasCtx.value.restore()
 }
 
 // 渲染单个绘图元素
@@ -752,7 +753,7 @@ function formatDateTime(iso: string): string {
           </svg>
 
           <!-- 绘图工具栏 -->
-          <div class="drawing-toolbar fixed bottom-6 right-6 bg-zinc-900 border border-zinc-800 rounded-lg p-2 flex flex-col gap-1 z-50">
+          <div class="drawing-toolbar absolute bottom-6 right-6 bg-zinc-900 border border-zinc-800 rounded-lg p-2 flex flex-col gap-1 z-50">
             <button
               v-for="tool in drawingTools"
               :key="tool.type"

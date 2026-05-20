@@ -1,32 +1,28 @@
 <script setup lang="ts">
-import { computed, ref, watch, onBeforeUnmount } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { Handle, Position, useVueFlow } from '@vue-flow/core'
-import { useInspirationStore, type InspirationItem } from '../stores/inspiration'
+import { useWorldStore } from '../stores/world'
 
 const props = defineProps<{
   id: string
-  data: { inspirationId: string; onRightMouseDown: (nodeId: string) => void }
+  data: { objectId: string }
   selected?: boolean
 }>()
 
-const store = useInspirationStore()
+const store = useWorldStore()
 const { getViewport } = useVueFlow()
-const item = computed<InspirationItem | undefined>(() =>
-  store.getItemById(props.data.inspirationId),
-)
-
+const obj = computed(() => store.getObjectById(props.data.objectId))
+const cardColor = computed(() => store.resolveCardColor(props.id))
 const card = computed(() => store.cards.find((c) => c.id === props.id))
 const cardX = computed(() => card.value?.x ?? 0)
 const cardY = computed(() => card.value?.y ?? 0)
-const cardWidth = computed(() => card.value?.width ?? 260)
-const cardHeight = computed(() => card.value?.height ?? 160)
+const cardWidth = computed(() => card.value?.width ?? 220)
+const cardHeight = computed(() => card.value?.height ?? 120)
 
-const highlighted = computed(() => store.highlightCardIds.includes(props.id))
-
-function onRightMouseDown(e: MouseEvent) {
-  e.preventDefault()
-  e.stopPropagation()
-  props.data.onRightMouseDown(props.id)
+function onHeaderDblClick() {
+  if (obj.value) {
+    store.openDetail(obj.value.id)
+  }
 }
 
 // ---- 8 方向缩放 ----
@@ -77,141 +73,46 @@ function onResizeMouseDown(e: MouseEvent, dir: Dir) {
   window.addEventListener('mouseup', onUp)
 }
 
-// ---- PDF 备注编辑 ----
-const noteText = ref(item.value?.content ?? '')
-watch(() => item.value?.content, (v) => { noteText.value = v ?? '' })
+// ---- 详情编辑 ----
+const detailText = ref(obj.value?.detailContent ?? '')
+watch(() => obj.value?.detailContent, (v) => { detailText.value = v ?? '' })
 
-function onNoteInput(e: Event) {
+function onDetailInput(e: Event) {
   const val = (e.target as HTMLTextAreaElement).value
-  noteText.value = val
-  store.updateItemContent(props.data.inspirationId, val)
-}
-
-// ---- 音频播放 ----
-const audioEl = ref<HTMLAudioElement | null>(null)
-const playing = ref(false)
-const progress = ref(0)
-const currentTimeStr = ref('0:00')
-const durationStr = ref('0:00')
-let rafId = 0
-
-function fmtTime(s: number): string {
-  const m = Math.floor(s / 60)
-  const sec = Math.floor(s % 60)
-  return `${m}:${sec.toString().padStart(2, '0')}`
-}
-
-function togglePlay() {
-  const el = audioEl.value
-  if (!el) return
-  if (el.paused) {
-    el.play()
-    playing.value = true
-    tick()
-  } else {
-    el.pause()
-    playing.value = false
-    cancelAnimationFrame(rafId)
+  detailText.value = val
+  if (obj.value) {
+    store.updateObjectDetail(obj.value.id, 'text', val)
   }
 }
-
-function tick() {
-  const el = audioEl.value
-  if (!el) return
-  progress.value = el.duration ? (el.currentTime / el.duration) * 100 : 0
-  currentTimeStr.value = fmtTime(el.currentTime)
-  if (!el.paused) rafId = requestAnimationFrame(tick)
-}
-
-function onLoadedMetadata() {
-  const el = audioEl.value
-  if (el) durationStr.value = fmtTime(el.duration)
-}
-
-function onAudioEnded() {
-  playing.value = false
-  progress.value = 0
-  currentTimeStr.value = '0:00'
-}
-
-function onSeek(e: MouseEvent) {
-  const el = audioEl.value
-  const bar = e.currentTarget as HTMLElement
-  if (!el || !el.duration) return
-  const rect = bar.getBoundingClientRect()
-  const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))
-  el.currentTime = ratio * el.duration
-  progress.value = ratio * 100
-  currentTimeStr.value = fmtTime(el.currentTime)
-}
-
-onBeforeUnmount(() => {
-  cancelAnimationFrame(rafId)
-  audioEl.value?.pause()
-})
 </script>
 
 <template>
   <div
-    class="inspiration-card"
-    :class="{ selected, highlighted }"
-    :style="{ width: cardWidth + 'px', height: cardHeight + 'px' }"
-    @mousedown.right="onRightMouseDown"
+    class="world-card"
+    :class="{ selected }"
+    :style="{ borderTopColor: cardColor, width: cardWidth + 'px', height: cardHeight + 'px' }"
   >
-    <div class="card-header">
-      <span class="card-title">{{ item?.title ?? '未知' }}</span>
-      <span class="card-badge">{{ item?.type }}</span>
+    <div
+      class="card-header"
+      :style="{ background: cardColor + '22' }"
+      @dblclick="onHeaderDblClick"
+    >
+      <span class="card-color-bar" :style="{ background: cardColor }"></span>
+      <span class="card-title">{{ obj?.name ?? '未知' }}</span>
     </div>
 
     <div class="card-body">
-      <template v-if="item?.type === 'image'">
-        <img :src="item.filePath" class="card-image" />
+      <template v-if="obj?.detailType === 'image' && obj.detailContent">
+        <img :src="obj.detailContent" class="card-image" />
       </template>
-      <template v-else-if="item?.type === 'text'">
+      <template v-else>
         <textarea
-          :value="noteText"
-          @input="onNoteInput"
+          :value="detailText"
+          @input="onDetailInput"
           @mousedown.stop
           @pointerdown.stop
           placeholder="写点什么…"
-          class="card-note"
-        />
-      </template>
-      <template v-else-if="item?.type === 'pdf'">
-        <textarea
-          :value="noteText"
-          @input="onNoteInput"
-          @mousedown.stop
-          @pointerdown.stop
-          placeholder="备注这份 PDF 的要点…"
-          class="card-note"
-        />
-      </template>
-      <template v-else-if="item?.type === 'audio'">
-        <audio
-          ref="audioEl"
-          :src="item.filePath"
-          preload="metadata"
-          @loadedmetadata="onLoadedMetadata"
-          @ended="onAudioEnded"
-        />
-        <div class="audio-player">
-          <button class="audio-btn" @click.stop="togglePlay" @mousedown.stop @pointerdown.stop>
-            <span v-if="playing">⏸</span>
-            <span v-else>▶</span>
-          </button>
-          <div class="audio-bar" @click.stop="onSeek" @mousedown.stop @pointerdown.stop>
-            <div class="audio-bar-fill" :style="{ width: progress + '%' }" />
-          </div>
-          <span class="audio-time">{{ currentTimeStr }}/{{ durationStr }}</span>
-        </div>
-        <textarea
-          :value="noteText"
-          @input="onNoteInput"
-          @mousedown.stop
-          @pointerdown.stop
-          placeholder="备注这段音频…"
-          class="card-note"
+          class="card-detail"
         />
       </template>
     </div>
@@ -232,9 +133,10 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.inspiration-card {
+.world-card {
   background: #18181b;
   border: 1px solid #27272a;
+  border-top: 3px solid #6b7280;
   border-radius: 8px;
   overflow: visible;
   font-size: 13px;
@@ -245,27 +147,28 @@ onBeforeUnmount(() => {
   flex-direction: column;
 }
 
-.inspiration-card:active {
+.world-card:active {
   cursor: grabbing;
 }
 
-.inspiration-card.selected {
+.world-card.selected {
   border-color: #a78bfa;
-}
-
-.inspiration-card.highlighted {
-  border-color: #a78bfa;
-  box-shadow: 0 0 12px 2px rgba(167, 139, 250, 0.3);
 }
 
 .card-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  gap: 6px;
   padding: 6px 10px;
-  background: #09090b;
   border-bottom: 1px solid #27272a;
+  cursor: default;
+}
+
+.card-color-bar {
+  width: 3px;
+  height: 14px;
+  border-radius: 2px;
+  flex-shrink: 0;
 }
 
 .card-title {
@@ -274,13 +177,6 @@ onBeforeUnmount(() => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.card-badge {
-  flex-shrink: 0;
-  font-size: 10px;
-  color: #71717a;
-  text-transform: uppercase;
 }
 
 .card-body {
@@ -300,7 +196,7 @@ onBeforeUnmount(() => {
   display: block;
 }
 
-.card-note {
+.card-detail {
   width: 100%;
   flex: 1;
   min-height: 0;
@@ -316,61 +212,12 @@ onBeforeUnmount(() => {
   font-family: inherit;
 }
 
-.card-note::placeholder {
+.card-detail::placeholder {
   color: #52525b;
 }
 
-.card-note:focus {
+.card-detail:focus {
   border-color: #a78bfa;
-}
-
-.audio-player {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-bottom: 6px;
-}
-
-.audio-btn {
-  width: 28px;
-  height: 28px;
-  flex-shrink: 0;
-  border-radius: 50%;
-  background: #3f3f46;
-  border: none;
-  color: #d4d4d8;
-  font-size: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-
-.audio-btn:hover {
-  background: #52525b;
-}
-
-.audio-bar {
-  flex: 1;
-  height: 4px;
-  background: #3f3f46;
-  border-radius: 2px;
-  cursor: pointer;
-  position: relative;
-}
-
-.audio-bar-fill {
-  height: 100%;
-  background: #a78bfa;
-  border-radius: 2px;
-  transition: width 0.05s linear;
-}
-
-.audio-time {
-  flex-shrink: 0;
-  font-size: 10px;
-  color: #71717a;
 }
 
 /* 8 方向缩放手柄 */

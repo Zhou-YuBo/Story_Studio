@@ -359,6 +359,26 @@ export const useInspirationStore = defineStore('inspiration', () => {
     }
   }
 
+  function updateCardSize(id: string, width: number, height: number) {
+    const card = cards.value.find((c) => c.id === id)
+    if (card) {
+      card.width = Math.max(160, width)
+      card.height = Math.max(80, height)
+      dirty.value = true
+    }
+  }
+
+  function updateCardRect(id: string, x: number, y: number, width: number, height: number) {
+    const card = cards.value.find((c) => c.id === id)
+    if (card) {
+      card.x = x
+      card.y = y
+      card.width = Math.max(160, width)
+      card.height = Math.max(80, height)
+      dirty.value = true
+    }
+  }
+
   function removeCard(id: string) {
     cards.value = cards.value.filter((c) => c.id !== id)
     edges.value = edges.value.filter((e) => e.source !== id && e.target !== id)
@@ -409,7 +429,7 @@ export const useInspirationStore = defineStore('inspiration', () => {
     notes, editingNoteId, highlightCardIds,
     createCanvas, openCanvas, saveCurrentCanvas, deleteCanvas, renameCanvas, newCanvas,
     requestAction, confirmSave, confirmDiscard, confirmCancel,
-    addCard, updateCardPosition, removeCard,
+    addCard, updateCardPosition, updateCardSize, updateCardRect, removeCard,
     addEdge, removeEdge, getItemById, updateItemContent, createTextItem,
     createNote, updateNoteContent, deleteNote, addNoteSource, removeNoteSource, getNotesForCanvas,
     activeDrawingTool, isDrawing, drawingPreview, drawingConfig, drawings,
