@@ -8,7 +8,7 @@ const history = inject(canvasHistoryKey, null)
 
 const props = defineProps<{
   id: string
-  data: { inspirationId: string; onRightMouseDown: (nodeId: string) => void }
+  data: { inspirationId: string }
   selected?: boolean
 }>()
 
@@ -25,12 +25,6 @@ const cardWidth = computed(() => card.value?.width ?? 260)
 const cardHeight = computed(() => card.value?.height ?? 160)
 
 const highlighted = computed(() => store.highlightCardIds.includes(props.id))
-
-function onRightMouseDown(e: MouseEvent) {
-  e.preventDefault()
-  e.stopPropagation()
-  props.data.onRightMouseDown(props.id)
-}
 
 // ---- 8 方向缩放 ----
 type Dir = 'n' | 's' | 'e' | 'w' | 'nw' | 'ne' | 'sw' | 'se'
@@ -161,7 +155,7 @@ onBeforeUnmount(() => {
     class="inspiration-card"
     :class="{ selected, highlighted }"
     :style="{ width: cardWidth + 'px', height: cardHeight + 'px' }"
-    @mousedown.right="onRightMouseDown"
+    @mousedown.right.prevent
   >
     <div class="card-header">
       <span class="card-title">{{ item?.title ?? '未知' }}</span>

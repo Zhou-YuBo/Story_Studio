@@ -1,12 +1,15 @@
 <script setup lang="ts">
-import { computed, markRaw, reactive, ref, onMounted, watch, provide } from 'vue'
+import { computed, markRaw, reactive, ref, provide } from 'vue'
 import { VueFlow, useVueFlow, SelectionMode } from '@vue-flow/core'
 import { storeToRefs } from 'pinia'
 import '@vue-flow/core/dist/style.css'
 import '@vue-flow/core/dist/theme-default.css'
-import { useInspirationStore, type InspirationItem, type DrawingItem } from '../stores/inspiration'
+import { useInspirationStore, type InspirationItem } from '../stores/inspiration'
 import { useCanvasHistory } from '../composables/useCanvasHistory'
 import { canvasHistoryKey, type CanvasHistoryHandle } from '../composables/canvasHistoryKey'
+import { useRightClickConnect } from '../composables/useRightClickConnect'
+import { useDrawingTool } from '../composables/useDrawingTool'
+import { useCanvasShortcuts } from '../composables/useCanvasShortcuts'
 import InspirationCard from '../components/InspirationCard.vue'
 import CenterEdge from '../components/CenterEdge.vue'
 import UndoButton from '../components/UndoButton.vue'
@@ -17,12 +20,79 @@ const history = useCanvasHistory({ cards: storeRefs.cards, edges: storeRefs.edge
 provide(canvasHistoryKey, { beginBatch: history.beginBatch, endBatch: history.endBatch } satisfies CanvasHistoryHandle)
 
 const vueFlowRef = ref<InstanceType<typeof VueFlow>>()
-const drawingCanvasRef = ref<HTMLCanvasElement | null>(null)
-const canvasCtx = ref<CanvasRenderingContext2D | null>(null)
 const { findNode, screenToFlowCoordinate, getSelectedNodes, getSelectedEdges, viewport, onViewportChange } = useVueFlow()
 
 const nodeTypes = { 'inspiration-card': markRaw(InspirationCard) } as any
 const edgeTypes = { 'center-edge': markRaw(CenterEdge) } as any
+
+// ---- 右键菜单 ----
+const contextMenu = reactive({
+  visible: false,
+  x: 0,
+  y: 0,
+  type: '' as 'node' | 'edge' | '',
+  targetId: '',
+})
+
+function closeContextMenu() {
+  contextMenu.visible = false
+}
+
+function deleteContextTarget() {
+  history.pushSnapshot()
+  if (contextMenu.type === 'node') store.removeCard(contextMenu.targetId)
+  if (contextMenu.type === 'edge') store.removeEdge(contextMenu.targetId)
+  closeContextMenu()
+}
+
+// ---- 组合式函数 ----
+const rc = useRightClickConnect({
+  cards: storeRefs.cards,
+  findNode,
+  screenToFlowCoordinate,
+  onConnect(sourceId, targetId) {
+    history.pushSnapshot()
+    store.addEdge(sourceId, targetId)
+  },
+  onContextMenu(targetId, type, x, y) {
+    contextMenu.visible = true
+    contextMenu.x = x
+    contextMenu.y = y
+    contextMenu.type = type
+    contextMenu.targetId = targetId
+  },
+  defaultCardSize: { width: 260, height: 160 },
+})
+
+const { drawingCanvasRef, ...drawing } = useDrawingTool({
+  store: {
+    activeDrawingTool: storeRefs.activeDrawingTool,
+    isDrawing: storeRefs.isDrawing,
+    drawingPreview: storeRefs.drawingPreview,
+    drawingConfig: storeRefs.drawingConfig,
+    drawings: storeRefs.drawings,
+    dirty: storeRefs.dirty,
+  },
+  screenToFlowCoordinate,
+  viewport,
+  vueFlowRef: vueFlowRef as any,
+  onViewportChange,
+  pushSnapshot: () => history.pushSnapshot(),
+})
+
+const renamingCanvasId = ref<string | null>(null)
+
+const { onKeyDown } = useCanvasShortcuts({
+  getSelectedNodes,
+  getSelectedEdges,
+  removeCard: store.removeCard,
+  removeEdge: store.removeEdge,
+  undo: () => history.undo(),
+  pushSnapshot: () => history.pushSnapshot(),
+  onF2: () => {
+    if (store.activeCanvasId) renamingCanvasId.value = store.activeCanvasId
+  },
+})
 
 // ---- 左侧面板 Tab ----
 const leftTab = ref<'materials' | 'canvases'>('materials')
@@ -38,7 +108,7 @@ const nodes = computed(() =>
     id: card.id,
     type: 'inspiration-card',
     position: { x: card.x, y: card.y },
-    data: { inspirationId: card.inspirationId, onRightMouseDown },
+    data: { inspirationId: card.inspirationId },
   })),
 )
 
@@ -53,23 +123,13 @@ const edges = computed(() =>
   })),
 )
 
-// ---- 绘图工具配置 ----
-const drawingTools = [
-  { type: 'line', label: '直线', icon: '─' },
-  { type: 'arrow', label: '箭头', icon: '→' },
-  { type: 'rect', label: '矩形', icon: '▢' },
-  { type: 'circle', label: '圆形', icon: '○' },
-  { type: 'triangle', label: '三角形', icon: '△' },
-  { type: 'brace', label: '大括号', icon: '{' },
-  { type: 'pencil', label: '手绘', icon: '✏' },
-]
-
+// ---- 绘图工具切换（灵感特有：清除高亮） ----
 function switchDrawingTool(toolType: string) {
-  store.activeDrawingTool = store.activeDrawingTool === toolType ? null : toolType
+  drawing.switchDrawingTool(toolType)
   store.highlightCardIds = []
 }
 
-// ---- 绘图工具 ----
+// ---- 双击创建自由文本 ----
 let lastPaneClickTime = 0
 
 function onPaneClick(event: MouseEvent) {
@@ -83,148 +143,14 @@ function onPaneClick(event: MouseEvent) {
   lastPaneClickTime = now
 }
 
-function startDrawing(e: MouseEvent, toolType: string) {
-  if (!store.activeDrawingTool) return
-  e.preventDefault()
-  const pos = screenToFlowCoordinate({ x: e.clientX, y: e.clientY })
-  store.isDrawing = true
-
-  const points = toolType === 'pencil' ? [pos] : [pos, pos]
-
-  store.drawingPreview = {
-    id: `draw-${Date.now()}`,
-    type: toolType as any,
-    color: store.drawingConfig.color,
-    lineWidth: store.drawingConfig.lineWidth,
-    points
-  }
-
-  // 在 window 上监听 mousemove/mouseup，保证拖出画布外也能继续
-  window.addEventListener('mousemove', onDrawingMouseMove)
-  window.addEventListener('mouseup', onDrawingMouseUp)
-}
-
-function onDrawingMouseMove(e: MouseEvent) {
-  if (!store.isDrawing || !store.drawingPreview) return
-  const pos = screenToFlowCoordinate({ x: e.clientX, y: e.clientY })
-
-  if (store.drawingPreview.type === 'pencil') {
-    store.drawingPreview.points.push(pos)
-  } else {
-    store.drawingPreview.points[1] = pos
-  }
-}
-
-function onDrawingMouseUp() {
-  finishDrawing()
-  window.removeEventListener('mousemove', onDrawingMouseMove)
-  window.removeEventListener('mouseup', onDrawingMouseUp)
-}
-
-function finishDrawing() {
-  if (store.isDrawing && store.drawingPreview) {
-    history.pushSnapshot()
-    store.drawings.push(store.drawingPreview)
-    store.dirty = true
-  }
-  store.isDrawing = false
-  store.drawingPreview = null
-}
-
-function onDrawingOverlayDown(e: MouseEvent) {
-  if (store.activeDrawingTool) {
-    startDrawing(e, store.activeDrawingTool)
-  }
-}
-
-// ---- 右键连线 ----
-const connecting = reactive({
-  active: false,
-  sourceId: '',
-  sourceX: 0,
-  sourceY: 0,
-  cursorX: 0,
-  cursorY: 0,
-})
-let justConnected = false
-
-function onRightMouseDown(nodeId: string) {
-  const src = findNode(nodeId)
-  if (!src) return
-
-  connecting.active = true
-  connecting.sourceId = nodeId
-  connecting.sourceX = src.position.x + (src.dimensions?.width ?? 260) / 2
-  connecting.sourceY = src.position.y + (src.dimensions?.height ?? 160) / 2
-  connecting.cursorX = connecting.sourceX
-  connecting.cursorY = connecting.sourceY
-}
-
-function onPaneMouseMove(event: MouseEvent) {
-  if (!connecting.active) return
-  const pos = screenToFlowCoordinate({ x: event.clientX, y: event.clientY })
-  connecting.cursorX = pos.x
-  connecting.cursorY = pos.y
-}
-
-function onPaneMouseUp(event: MouseEvent) {
-  finishConnecting(event.clientX, event.clientY)
-}
-
-function onCanvasMouseUp(event: MouseEvent) {
-  if (!connecting.active) return
-  finishConnecting(event.clientX, event.clientY)
-}
-
-function finishConnecting(clientX: number, clientY: number) {
-  if (!connecting.active) return
-
-  const pos = screenToFlowCoordinate({ x: clientX, y: clientY })
-  let targetId = ''
-  for (const card of store.cards) {
-    const node = findNode(card.id)
-    if (!node) continue
-    const w = node.dimensions?.width ?? 260
-    const h = node.dimensions?.height ?? 160
-    if (
-      pos.x >= node.position.x &&
-      pos.x <= node.position.x + w &&
-      pos.y >= node.position.y &&
-      pos.y <= node.position.y + h
-    ) {
-      targetId = card.id
-      break
-    }
-  }
-
-  if (targetId && targetId !== connecting.sourceId) {
-    history.pushSnapshot()
-    store.addEdge(connecting.sourceId, targetId)
-  }
-
-  connecting.active = false
-  justConnected = true
-  setTimeout(() => { justConnected = false }, 100)
-}
-
 // ---- 拖入素材 ----
 function typeIcon(type: InspirationItem['type']): string {
-  const map: Record<string, string> = {
-    image: 'IMG',
-    text: 'TXT',
-    pdf: 'PDF',
-    audio: 'AUD',
-  }
+  const map: Record<string, string> = { image: 'IMG', text: 'TXT', pdf: 'PDF', audio: 'AUD' }
   return map[type]
 }
 
 function typeLabel(type: InspirationItem['type']): string {
-  const map: Record<string, string> = {
-    image: '图片',
-    text: '文本',
-    pdf: 'PDF',
-    audio: '音频',
-  }
+  const map: Record<string, string> = { image: '图片', text: '文本', pdf: 'PDF', audio: '音频' }
   return map[type]
 }
 
@@ -241,12 +167,7 @@ function onDragStart(event: DragEvent, id: string) {
 function onDrop(event: DragEvent) {
   const inspirationId = event.dataTransfer?.getData('application/inspiration-id')
   if (!inspirationId || !vueFlowRef.value) return
-
-  const position = vueFlowRef.value.screenToFlowCoordinate({
-    x: event.clientX,
-    y: event.clientY,
-  })
-
+  const position = vueFlowRef.value.screenToFlowCoordinate({ x: event.clientX, y: event.clientY })
   history.pushSnapshot()
   store.addCard(inspirationId, position.x - 130, position.y - 20)
   ;(event.currentTarget as HTMLElement)?.focus()
@@ -257,7 +178,7 @@ function onNodeDragStop({ node }: { node: { id: string; position: { x: number; y
   store.updateCardPosition(node.id, node.position.x, node.position.y)
 }
 
-// ---- 画布切换（带未保存提醒） ----
+// ---- 画布切换 ----
 function handleOpenCanvas(id: string) {
   store.requestAction(() => store.openCanvas(id))
   history.clear()
@@ -270,248 +191,6 @@ function handleNewCanvas() {
   })
   history.clear()
 }
-
-// ---- 右键菜单 ----
-const contextMenu = reactive({
-  visible: false,
-  x: 0,
-  y: 0,
-  type: '' as 'node' | 'edge' | '',
-  targetId: '',
-})
-
-function onNodeContextMenu({ event, node }: { event: any; node: { id: string } }) {
-  event.preventDefault()
-  if (justConnected) return
-  contextMenu.visible = true
-  contextMenu.x = event.clientX
-  contextMenu.y = event.clientY
-  contextMenu.type = 'node'
-  contextMenu.targetId = node.id
-}
-
-function onEdgeContextMenu({ event, edge }: { event: any; edge: { id: string } }) {
-  event.preventDefault()
-  if (justConnected) return
-  contextMenu.visible = true
-  contextMenu.x = event.clientX
-  contextMenu.y = event.clientY
-  contextMenu.type = 'edge'
-  contextMenu.targetId = edge.id
-}
-
-function closeContextMenu() {
-  contextMenu.visible = false
-}
-
-function deleteContextTarget() {
-  history.pushSnapshot()
-  if (contextMenu.type === 'node') store.removeCard(contextMenu.targetId)
-  if (contextMenu.type === 'edge') store.removeEdge(contextMenu.targetId)
-  closeContextMenu()
-}
-
-// ---- 绘图层渲染 ----
-onMounted(() => {
-  if (drawingCanvasRef.value) {
-    canvasCtx.value = drawingCanvasRef.value.getContext('2d')
-    window.addEventListener('resize', () => {
-      if (drawingCanvasRef.value && vueFlowRef.value) {
-        const container = vueFlowRef.value.$el as HTMLElement
-        drawingCanvasRef.value.width = container.clientWidth
-        drawingCanvasRef.value.height = container.clientHeight
-        renderDrawings()
-      }
-    })
-    setTimeout(() => window.dispatchEvent(new Event('resize')), 100)
-  }
-  onViewportChange(() => {
-    renderDrawings()
-  })
-})
-
-// 渲染绘图元素
-function renderDrawings() {
-  if (!canvasCtx.value || !drawingCanvasRef.value) return
-  const { x, y, zoom } = viewport.value
-  canvasCtx.value.clearRect(0, 0, drawingCanvasRef.value.width, drawingCanvasRef.value.height)
-  canvasCtx.value.save()
-  canvasCtx.value.translate(x, y)
-  canvasCtx.value.scale(zoom, zoom)
-  for (const draw of store.drawings) {
-    renderDrawingItem(draw)
-  }
-  if (store.drawingPreview) {
-    renderDrawingItem(store.drawingPreview)
-  }
-  canvasCtx.value.restore()
-}
-
-// 渲染单个绘图元素
-function renderDrawingItem(item: DrawingItem) {
-  if (!canvasCtx.value) return
-
-  canvasCtx.value.strokeStyle = item.color
-  canvasCtx.value.lineWidth = item.lineWidth
-  canvasCtx.value.lineCap = 'round'
-  canvasCtx.value.lineJoin = 'round'
-
-  switch (item.type) {
-    case 'line':
-      canvasCtx.value.beginPath()
-      canvasCtx.value.moveTo(item.points[0].x, item.points[0].y)
-      canvasCtx.value.lineTo(item.points[1].x, item.points[1].y)
-      canvasCtx.value.stroke()
-      break
-
-    case 'arrow':
-      if (item.points.length >= 2) {
-        const headLen = 16
-        const angle = Math.atan2(item.points[1].y - item.points[0].y, item.points[1].x - item.points[0].x)
-        // 直线提前结束到箭头底边位置
-        const lineEnd = {
-          x: item.points[1].x - headLen * Math.cos(angle),
-          y: item.points[1].y - headLen * Math.sin(angle)
-        }
-        canvasCtx.value.beginPath()
-        canvasCtx.value.moveTo(item.points[0].x, item.points[0].y)
-        canvasCtx.value.lineTo(lineEnd.x, lineEnd.y)
-        canvasCtx.value.stroke()
-        drawArrowHead(item.points[1], angle, headLen)
-      }
-      break
-
-    case 'rect':
-      if (item.points.length >= 2) {
-        const x = Math.min(item.points[0].x, item.points[1].x)
-        const y = Math.min(item.points[0].y, item.points[1].y)
-        const width = Math.abs(item.points[1].x - item.points[0].x)
-        const height = Math.abs(item.points[1].y - item.points[0].y)
-        canvasCtx.value.strokeRect(x, y, width, height)
-      }
-      break
-
-    case 'circle':
-      if (item.points.length >= 2) {
-        const dx = item.points[1].x - item.points[0].x
-        const dy = item.points[1].y - item.points[0].y
-        const radius = Math.sqrt(dx * dx + dy * dy)
-        canvasCtx.value.beginPath()
-        canvasCtx.value.arc(item.points[0].x, item.points[0].y, radius, 0, 2 * Math.PI)
-        canvasCtx.value.stroke()
-      }
-      break
-
-    case 'pencil':
-      if (item.points.length > 1) {
-        canvasCtx.value.beginPath()
-        canvasCtx.value.moveTo(item.points[0].x, item.points[0].y)
-        for (let i = 1; i < item.points.length; i++) {
-          canvasCtx.value.lineTo(item.points[i].x, item.points[i].y)
-        }
-        canvasCtx.value.stroke()
-      }
-      break
-    case 'triangle':
-      if (item.points.length >= 2) {
-        const dx = item.points[1].x - item.points[0].x
-        const dy = item.points[1].y - item.points[0].y
-        canvasCtx.value.beginPath()
-        canvasCtx.value.moveTo(item.points[0].x, item.points[0].y)
-        canvasCtx.value.lineTo(item.points[1].x, item.points[1].y)
-        canvasCtx.value.lineTo(item.points[0].x + dx / 2 - dy * 0.433, item.points[0].y + dy / 2 + dx * 0.433)
-        canvasCtx.value.closePath()
-        canvasCtx.value.stroke()
-      }
-      break
-    case 'brace':
-      if (item.points.length >= 2) {
-        const x = Math.min(item.points[0].x, item.points[1].x)
-        const y = Math.min(item.points[0].y, item.points[1].y)
-        const w = Math.abs(item.points[1].x - item.points[0].x)
-        const h = Math.abs(item.points[1].y - item.points[0].y)
-        if (w > 10 && h > 10) {
-          // 先用矩形高度作为初始字号，测量实际字形尺寸
-          canvasCtx.value.font = `${h}px sans-serif`
-          const metrics = canvasCtx.value.measureText('{')
-          // actualBoundingBoxAscent + Descent 是字形实际高度
-          const glyphH = (metrics.actualBoundingBoxAscent ?? 0) + (metrics.actualBoundingBoxDescent ?? 0)
-          const glyphW = metrics.width
-          // 按比例放大字号，让字形撑满矩形
-          const scale = Math.min(w / glyphW, h / glyphH)
-          const fontSize = h * scale
-          canvasCtx.value.font = `${fontSize}px sans-serif`
-          canvasCtx.value.textBaseline = 'top'
-          canvasCtx.value.textAlign = 'center'
-          canvasCtx.value.fillStyle = item.color
-          canvasCtx.value.fillText('{', x + w / 2, y + (h - fontSize) / 2)
-        }
-      }
-      break
-  }
-}
-
-// 绘制箭头头部
-function drawArrowHead(tip: {x: number, y: number}, angle: number, headLength: number) {
-  if (!canvasCtx.value) return
-
-  const x1 = tip.x - headLength * Math.cos(angle - Math.PI / 4)
-  const y1 = tip.y - headLength * Math.sin(angle - Math.PI / 4)
-  const x2 = tip.x - headLength * Math.cos(angle + Math.PI / 4)
-  const y2 = tip.y - headLength * Math.sin(angle + Math.PI / 4)
-
-  canvasCtx.value.beginPath()
-  canvasCtx.value.moveTo(x1, y1)
-  canvasCtx.value.lineTo(tip.x, tip.y)
-  canvasCtx.value.lineTo(x2, y2)
-  canvasCtx.value.closePath()
-  canvasCtx.value.fillStyle = canvasCtx.value.strokeStyle
-  canvasCtx.value.fill()
-}
-
-// 监听绘图变化，自动重绘
-watch([() => store.drawings, () => store.drawingPreview], () => {
-  renderDrawings()
-}, { deep: true })
-
-// ---- 键盘快捷键 ----
-function onKeyDown(e: KeyboardEvent) {
-  // Ctrl+Z: 撤回
-  if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
-    e.preventDefault()
-    history.undo()
-    return
-  }
-  // Delete / Backspace：删除选中的卡片或连线
-  if (e.key === 'Delete' || e.key === 'Backspace') {
-    // 避免在输入框里误删
-    if ((e.target as HTMLElement).tagName === 'INPUT' || (e.target as HTMLElement).tagName === 'TEXTAREA') return
-
-    const selectedNodes = getSelectedNodes.value
-    const selectedEdges = getSelectedEdges.value
-
-    if (selectedNodes.length > 0) {
-      history.pushSnapshot()
-      for (const n of selectedNodes) store.removeCard(n.id)
-      e.preventDefault()
-    } else if (selectedEdges.length > 0) {
-      history.pushSnapshot()
-      for (const ed of selectedEdges) store.removeEdge(ed.id)
-      e.preventDefault()
-    }
-  }
-
-  // F2：重命名当前画布
-  if (e.key === 'F2') {
-    e.preventDefault()
-    if (store.activeCanvasId) {
-      renamingCanvasId.value = store.activeCanvasId
-    }
-  }
-}
-
-// ---- 画布重命名 ----
-const renamingCanvasId = ref<string | null>(null)
 
 function startRename(canvasId: string) {
   renamingCanvasId.value = canvasId
@@ -738,7 +417,7 @@ function formatDateTime(iso: string): string {
           </button>
         </div>
       </header>
-      <div class="flex-1 relative outline-none" @dragover.prevent @drop="onDrop" @mouseup.right="onCanvasMouseUp" @click="closeContextMenu" @keydown="onKeyDown" tabindex="0">
+      <div class="flex-1 relative outline-none" @dragover.prevent @drop="onDrop" @mousedown.right="rc.onCanvasRightDown" @click="closeContextMenu" @keydown="onKeyDown" tabindex="0">
         <VueFlow
           ref="vueFlowRef"
           v-model:nodes="nodes"
@@ -755,21 +434,18 @@ function formatDateTime(iso: string): string {
           :pan-on-drag="!store.activeDrawingTool"
           class="inspiration-flow"
           @node-drag-stop="onNodeDragStop"
-          @pane-mouse-move="onPaneMouseMove"
-          @pane-mouse-up="onPaneMouseUp"
-          @node-context-menu="onNodeContextMenu"
-          @edge-context-menu="onEdgeContextMenu"
+          @edge-context-menu="rc.handleEdgeContextMenu"
           @pane-click="onPaneClick"
           @contextmenu.prevent
         >
           <!-- 右键连线时的临时线 -->
           <svg
-            v-if="connecting.active"
+            v-if="rc.isConnecting.value"
             class="connecting-line"
             style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible;"
           >
             <path
-              :d="`M${connecting.sourceX},${connecting.sourceY} L${connecting.cursorX},${connecting.cursorY}`"
+              :d="`M${rc.connectLine.sourceX},${rc.connectLine.sourceY} L${rc.connectLine.cursorX},${rc.connectLine.cursorY}`"
               fill="none"
               stroke="#a78bfa"
               stroke-width="2"
@@ -782,7 +458,7 @@ function formatDateTime(iso: string): string {
             <UndoButton :can-undo="history.canUndo.value" @undo="history.undo()" />
             <div class="w-full h-px bg-zinc-800 my-1"></div>
             <button
-              v-for="tool in drawingTools"
+              v-for="tool in drawing.drawingTools"
               :key="tool.type"
               class="w-8 h-8 flex items-center justify-center rounded hover:bg-zinc-800 transition-colors text-sm"
               :class="store.activeDrawingTool === tool.type ? 'bg-violet-600 text-white' : 'text-zinc-400'"
@@ -821,7 +497,7 @@ function formatDateTime(iso: string): string {
             v-if="store.activeDrawingTool"
             class="drawing-overlay"
             style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 20; cursor: crosshair;"
-            @mousedown="onDrawingOverlayDown"
+            @mousedown="drawing.onDrawingOverlayDown"
           />
 
           <template #pane>

@@ -1,12 +1,15 @@
 <script setup lang="ts">
-import { computed, markRaw, reactive, ref, onMounted, watch, provide } from 'vue'
+import { computed, markRaw, reactive, ref, provide } from 'vue'
 import { VueFlow, useVueFlow, SelectionMode } from '@vue-flow/core'
 import { storeToRefs } from 'pinia'
 import '@vue-flow/core/dist/style.css'
 import '@vue-flow/core/dist/theme-default.css'
-import { useWorldStore, type DrawingItem } from '../stores/world'
+import { useWorldStore } from '../stores/world'
 import { useCanvasHistory } from '../composables/useCanvasHistory'
 import { canvasHistoryKey, type CanvasHistoryHandle } from '../composables/canvasHistoryKey'
+import { useRightClickConnect } from '../composables/useRightClickConnect'
+import { useDrawingTool } from '../composables/useDrawingTool'
+import { useCanvasShortcuts } from '../composables/useCanvasShortcuts'
 import WorldCard from '../components/WorldCard.vue'
 import CenterEdge from '../components/CenterEdge.vue'
 import ObjectDetailPanel from '../components/ObjectDetailPanel.vue'
@@ -18,12 +21,112 @@ const history = useCanvasHistory({ cards: storeRefs.cards, edges: storeRefs.edge
 provide(canvasHistoryKey, { beginBatch: history.beginBatch, endBatch: history.endBatch } satisfies CanvasHistoryHandle)
 
 const vueFlowRef = ref<InstanceType<typeof VueFlow>>()
-const drawingCanvasRef = ref<HTMLCanvasElement | null>(null)
-const canvasCtx = ref<CanvasRenderingContext2D | null>(null)
 const { findNode, screenToFlowCoordinate, getSelectedNodes, getSelectedEdges, viewport, onViewportChange } = useVueFlow()
 
 const nodeTypes = { 'world-card': markRaw(WorldCard) } as any
 const edgeTypes = { 'center-edge': markRaw(CenterEdge) } as any
+
+// ---- 右键菜单 ----
+const contextMenu = reactive({
+  visible: false,
+  x: 0,
+  y: 0,
+  type: '' as 'node' | 'edge' | '',
+  targetId: '',
+  showColorPicker: false,
+})
+
+function closeContextMenu() {
+  contextMenu.visible = false
+  contextMenu.showColorPicker = false
+}
+
+interface ContextMenuItem {
+  label: string
+  danger?: boolean
+  action: () => void
+}
+
+const contextMenuItems = computed<ContextMenuItem[]>(() => {
+  if (contextMenu.type === 'node') {
+    return [
+      { label: '修改颜色', action: () => { contextMenu.showColorPicker = true } },
+      { label: '删除', danger: true, action: () => { history.pushSnapshot(); store.removeCard(contextMenu.targetId); closeContextMenu() } },
+    ]
+  }
+  if (contextMenu.type === 'edge') {
+    return [
+      { label: '删除', danger: true, action: () => { history.pushSnapshot(); store.removeEdge(contextMenu.targetId); closeContextMenu() } },
+    ]
+  }
+  return []
+})
+
+function onCardColorInput(e: Event) {
+  const input = e.target as HTMLInputElement
+  if (input && input.value) store.updateCardColor(contextMenu.targetId, input.value)
+}
+
+function onCardColorChange(e: Event) {
+  history.pushSnapshot()
+  onCardColorInput(e)
+}
+
+function resetCardColor() {
+  history.pushSnapshot()
+  store.updateCardColor(contextMenu.targetId, undefined)
+  contextMenu.showColorPicker = false
+}
+
+// ---- 组合式函数 ----
+const rc = useRightClickConnect({
+  cards: storeRefs.cards,
+  findNode,
+  screenToFlowCoordinate,
+  onConnect(sourceId, targetId) {
+    history.pushSnapshot()
+    store.addEdge(sourceId, targetId)
+  },
+  onContextMenu(targetId, type, x, y) {
+    contextMenu.visible = true
+    contextMenu.x = x
+    contextMenu.y = y
+    contextMenu.type = type
+    contextMenu.targetId = targetId
+    contextMenu.showColorPicker = false
+  },
+  defaultCardSize: { width: 220, height: 120 },
+})
+
+const { drawingCanvasRef, ...drawing } = useDrawingTool({
+  store: {
+    activeDrawingTool: storeRefs.activeDrawingTool,
+    isDrawing: storeRefs.isDrawing,
+    drawingPreview: storeRefs.drawingPreview,
+    drawingConfig: storeRefs.drawingConfig,
+    drawings: storeRefs.drawings,
+    dirty: storeRefs.dirty,
+  },
+  screenToFlowCoordinate,
+  viewport,
+  vueFlowRef: vueFlowRef as any,
+  onViewportChange,
+  pushSnapshot: () => history.pushSnapshot(),
+})
+
+const renamingCanvasId = ref<string | null>(null)
+
+const { onKeyDown } = useCanvasShortcuts({
+  getSelectedNodes,
+  getSelectedEdges,
+  removeCard: store.removeCard,
+  removeEdge: store.removeEdge,
+  undo: () => history.undo(),
+  pushSnapshot: () => history.pushSnapshot(),
+  onF2: () => {
+    if (store.activeCanvasId) renamingCanvasId.value = store.activeCanvasId
+  },
+})
 
 // ---- 左侧面板 Tab ----
 const leftTab = ref<'entries' | 'canvases'>('entries')
@@ -40,11 +143,8 @@ const editingObjectColorId = ref<string | null>(null)
 const editingCategoryColorId = ref<string | null>(null)
 
 function toggleCategory(id: string) {
-  if (expandedCategories.value.has(id)) {
-    expandedCategories.value.delete(id)
-  } else {
-    expandedCategories.value.add(id)
-  }
+  if (expandedCategories.value.has(id)) expandedCategories.value.delete(id)
+  else expandedCategories.value.add(id)
 }
 
 function handleAddCategory() {
@@ -56,23 +156,17 @@ function handleAddCategory() {
   showNewCategory.value = false
 }
 
-function startRenameCategory(id: string) {
-  renamingCategoryId.value = id
-}
+function startRenameCategory(id: string) { renamingCategoryId.value = id }
 
 function finishRenameCategory(id: string, event: Event) {
   const input = event.target as HTMLInputElement
-  if (input && input.value.trim()) {
-    store.renameCategory(id, input.value.trim())
-  }
+  if (input && input.value.trim()) store.renameCategory(id, input.value.trim())
   renamingCategoryId.value = null
 }
 
 function handleCategoryColorChange(id: string, event: Event) {
   const input = event.target as HTMLInputElement
-  if (input && input.value) {
-    store.updateCategoryColor(id, input.value)
-  }
+  if (input && input.value) store.updateCategoryColor(id, input.value)
   editingCategoryColorId.value = null
 }
 
@@ -89,38 +183,33 @@ function handleCreateObject() {
   newObjectName.value = ''
 }
 
-function startRenameObject(id: string) {
-  renamingObjectId.value = id
-}
+function startRenameObject(id: string) { renamingObjectId.value = id }
 
 function finishRenameObject(id: string, event: Event) {
   const input = event.target as HTMLInputElement
-  if (input && input.value.trim()) {
-    store.renameObject(id, input.value.trim())
-  }
+  if (input && input.value.trim()) store.renameObject(id, input.value.trim())
   renamingObjectId.value = null
 }
 
 function handleObjectColorChange(id: string, event: Event) {
   const input = event.target as HTMLInputElement
-  if (input && input.value) {
-    store.updateObjectColor(id, input.value)
-  }
+  if (input && input.value) store.updateObjectColor(id, input.value)
   editingObjectColorId.value = null
 }
 
-function clearObjectColor(id: string) {
-  store.updateObjectColor(id, undefined)
-}
+function clearObjectColor(id: string) { store.updateObjectColor(id, undefined) }
 
 function onObjectDragStart(e: DragEvent, objectId: string) {
   e.dataTransfer!.setData('world-object-id', objectId)
   e.dataTransfer!.effectAllowed = 'copy'
 }
 
-// ---- 画布面板状态 ----
-const renamingCanvasId = ref<string | null>(null)
+function handleDeleteObject(id: string) {
+  history.pushSnapshot()
+  store.deleteObject(id)
+}
 
+// ---- 画布 ----
 const activeCanvasName = computed(() => {
   if (!store.activeCanvasId) return '未命名画布'
   const c = store.canvases.find((c) => c.id === store.activeCanvasId)
@@ -140,20 +229,11 @@ function handleOpenCanvas(id: string) {
   history.clear()
 }
 
-function handleDeleteObject(id: string) {
-  history.pushSnapshot()
-  store.deleteObject(id)
-}
-
-function startRenameCanvas(id: string) {
-  renamingCanvasId.value = id
-}
+function startRenameCanvas(id: string) { renamingCanvasId.value = id }
 
 function finishRenameCanvas(id: string, event: Event) {
   const input = event.target as HTMLInputElement
-  if (input && input.value.trim()) {
-    store.renameCanvas(id, input.value.trim())
-  }
+  if (input && input.value.trim()) store.renameCanvas(id, input.value.trim())
   renamingCanvasId.value = null
 }
 
@@ -178,206 +258,11 @@ const edges = computed(() =>
   })),
 )
 
-// ---- 绘图工具 ----
-const drawingTools = [
-  { type: 'line', label: '直线', icon: '─' },
-  { type: 'arrow', label: '箭头', icon: '→' },
-  { type: 'rect', label: '矩形', icon: '▢' },
-  { type: 'circle', label: '圆形', icon: '○' },
-  { type: 'triangle', label: '三角形', icon: '△' },
-  { type: 'brace', label: '大括号', icon: '{' },
-  { type: 'pencil', label: '手绘', icon: '✏' },
-]
-
-function switchDrawingTool(toolType: string) {
-  store.activeDrawingTool = store.activeDrawingTool === toolType ? null : toolType
-}
-
-function startDrawing(e: MouseEvent, toolType: string) {
-  if (!store.activeDrawingTool) return
-  e.preventDefault()
-  const pos = screenToFlowCoordinate({ x: e.clientX, y: e.clientY })
-  store.isDrawing = true
-  const points = toolType === 'pencil' ? [pos] : [pos, pos]
-  store.drawingPreview = {
-    id: `draw-${Date.now()}`,
-    type: toolType as any,
-    color: store.drawingConfig.color,
-    lineWidth: store.drawingConfig.lineWidth,
-    points,
-  }
-  window.addEventListener('mousemove', onDrawingMouseMove)
-  window.addEventListener('mouseup', onDrawingMouseUp)
-}
-
-function onDrawingMouseMove(e: MouseEvent) {
-  if (!store.isDrawing || !store.drawingPreview) return
-  const pos = screenToFlowCoordinate({ x: e.clientX, y: e.clientY })
-  if (store.drawingPreview.type === 'pencil') {
-    store.drawingPreview.points.push(pos)
-  } else {
-    store.drawingPreview.points[1] = pos
-  }
-}
-
-function onDrawingMouseUp() {
-  finishDrawing()
-  window.removeEventListener('mousemove', onDrawingMouseMove)
-  window.removeEventListener('mouseup', onDrawingMouseUp)
-}
-
-function finishDrawing() {
-  if (store.isDrawing && store.drawingPreview) {
-    history.pushSnapshot()
-    store.drawings.push(store.drawingPreview)
-    store.dirty = true
-  }
-  store.isDrawing = false
-  store.drawingPreview = null
-}
-
-function onDrawingOverlayDown(e: MouseEvent) {
-  if (store.activeDrawingTool) {
-    startDrawing(e, store.activeDrawingTool)
-  }
-}
-
-// ---- 右键状态机 ----
-// idle → pending (mousedown) → connecting (移动超阈值) / contextMenu (松手未超阈值)
-const rightClick = reactive({
-  state: 'idle' as 'idle' | 'pending' | 'connecting',
-  sourceId: '',
-  sourceX: 0,
-  sourceY: 0,
-  cursorX: 0,
-  cursorY: 0,
-  startX: 0,
-  startY: 0,
-})
-const DRAG_THRESHOLD = 5
-
-// 上下文菜单
-const contextMenu = reactive({
-  visible: false,
-  x: 0,
-  y: 0,
-  type: '' as 'node' | 'edge' | '',
-  targetId: '',
-  showColorPicker: false,
-})
-
-function onCanvasRightDown(e: MouseEvent) {
-  // 通过 hit test 判断右键点中了哪个节点
-  const flowPos = screenToFlowCoordinate({ x: e.clientX, y: e.clientY })
-  let hitNodeId = ''
-  for (const card of store.cards) {
-    const node = findNode(card.id)
-    if (!node) continue
-    const w = node.dimensions?.width ?? 220
-    const h = node.dimensions?.height ?? 120
-    if (
-      flowPos.x >= node.position.x &&
-      flowPos.x <= node.position.x + w &&
-      flowPos.y >= node.position.y &&
-      flowPos.y <= node.position.y + h
-    ) {
-      hitNodeId = card.id
-      break
-    }
-  }
-  if (!hitNodeId) return
-  e.preventDefault()
-  const src = findNode(hitNodeId)
-  if (!src) return
-  rightClick.state = 'pending'
-  rightClick.sourceId = hitNodeId
-  rightClick.sourceX = src.position.x + (src.dimensions?.width ?? 220) / 2
-  rightClick.sourceY = src.position.y + (src.dimensions?.height ?? 120) / 2
-  rightClick.cursorX = rightClick.sourceX
-  rightClick.cursorY = rightClick.sourceY
-  rightClick.startX = e.clientX
-  rightClick.startY = e.clientY
-  window.addEventListener('mousemove', onRightClickMove)
-  window.addEventListener('mouseup', onRightClickUp)
-}
-
-function onRightClickMove(e: MouseEvent) {
-  if (rightClick.state === 'pending') {
-    const dx = e.clientX - rightClick.startX
-    const dy = e.clientY - rightClick.startY
-    if (Math.sqrt(dx * dx + dy * dy) > DRAG_THRESHOLD) {
-      rightClick.state = 'connecting'
-    }
-  }
-  if (rightClick.state === 'connecting') {
-    const pos = screenToFlowCoordinate({ x: e.clientX, y: e.clientY })
-    rightClick.cursorX = pos.x
-    rightClick.cursorY = pos.y
-  }
-}
-
-function onRightClickUp(e: MouseEvent) {
-  window.removeEventListener('mousemove', onRightClickMove)
-  window.removeEventListener('mouseup', onRightClickUp)
-  if (rightClick.state === 'connecting') {
-    finishConnecting(e.clientX, e.clientY)
-  } else if (rightClick.state === 'pending') {
-    showContextMenu(rightClick.sourceId, 'node', rightClick.startX, rightClick.startY)
-  }
-  rightClick.state = 'idle'
-}
-
-function finishConnecting(clientX: number, clientY: number) {
-  const pos = screenToFlowCoordinate({ x: clientX, y: clientY })
-  let targetId = ''
-  for (const card of store.cards) {
-    const node = findNode(card.id)
-    if (!node) continue
-    const w = node.dimensions?.width ?? 220
-    const h = node.dimensions?.height ?? 120
-    if (
-      pos.x >= node.position.x &&
-      pos.x <= node.position.x + w &&
-      pos.y >= node.position.y &&
-      pos.y <= node.position.y + h
-    ) {
-      targetId = card.id
-      break
-    }
-  }
-  if (targetId && targetId !== rightClick.sourceId) {
-    history.pushSnapshot()
-    store.addEdge(rightClick.sourceId, targetId)
-  }
-}
-
-function showContextMenu(targetId: string, type: 'node' | 'edge', x: number, y: number) {
-  contextMenu.visible = true
-  contextMenu.x = x
-  contextMenu.y = y
-  contextMenu.type = type
-  contextMenu.targetId = targetId
-  contextMenu.showColorPicker = false
-}
-
-function onEdgeContextMenu({ event, edge }: { event: any; edge: { id: string } }) {
-  event.preventDefault()
-  showContextMenu(edge.id, 'edge', event.clientX, event.clientY)
-}
-
-function closeContextMenu() {
-  contextMenu.visible = false
-  contextMenu.showColorPicker = false
-}
-
 // ---- 拖入对象 ----
 function onDrop(event: DragEvent) {
   const objectId = event.dataTransfer?.getData('world-object-id')
   if (!objectId || !vueFlowRef.value) return
-  const position = vueFlowRef.value.screenToFlowCoordinate({
-    x: event.clientX,
-    y: event.clientY,
-  })
+  const position = vueFlowRef.value.screenToFlowCoordinate({ x: event.clientX, y: event.clientY })
   history.pushSnapshot()
   store.addCard(objectId, position.x - 110, position.y - 20)
   ;(event.currentTarget as HTMLElement)?.focus()
@@ -395,7 +280,6 @@ function onPaneClick(event: MouseEvent) {
   const now = Date.now()
   if (now - lastPaneClickTime < 350) {
     const pos = screenToFlowCoordinate({ x: event.clientX, y: event.clientY })
-    // 在未分类下创建自由文本对象
     const uncat = store.categories.find((c) => c.name === '未分类')
     if (uncat) {
       const obj = store.createObject(uncat.id, '自由文本')
@@ -405,241 +289,6 @@ function onPaneClick(event: MouseEvent) {
   }
   lastPaneClickTime = now
 }
-
-// ---- 上下文菜单项 ----
-interface ContextMenuItem {
-  label: string
-  danger?: boolean
-  action: () => void
-}
-
-const contextMenuItems = computed<ContextMenuItem[]>(() => {
-  if (contextMenu.type === 'node') {
-    return [
-      { label: '修改颜色', action: () => { contextMenu.showColorPicker = true } },
-      { label: '删除', danger: true, action: () => { history.pushSnapshot(); store.removeCard(contextMenu.targetId); closeContextMenu() } },
-    ]
-  }
-  if (contextMenu.type === 'edge') {
-    return [
-      { label: '删除', danger: true, action: () => { history.pushSnapshot(); store.removeEdge(contextMenu.targetId); closeContextMenu() } },
-    ]
-  }
-  return []
-})
-
-function onCardColorInput(e: Event) {
-  const input = e.target as HTMLInputElement
-  if (input && input.value) {
-    store.updateCardColor(contextMenu.targetId, input.value)
-  }
-}
-
-function onCardColorChange(e: Event) {
-  history.pushSnapshot()
-  onCardColorInput(e)
-}
-
-function resetCardColor() {
-  history.pushSnapshot()
-  store.updateCardColor(contextMenu.targetId, undefined)
-  contextMenu.showColorPicker = false
-}
-
-// ---- 键盘 ----
-function onKeyDown(e: KeyboardEvent) {
-  // Ctrl+Z: 撤回
-  if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
-    e.preventDefault()
-    history.undo()
-    return
-  }
-  if (e.key === 'Delete' || e.key === 'Backspace') {
-    const selectedNodes = getSelectedNodes.value
-    const selectedEdges = getSelectedEdges.value
-    if (selectedNodes.length > 0) {
-      history.pushSnapshot()
-      for (const n of selectedNodes) store.removeCard(n.id)
-      e.preventDefault()
-    } else if (selectedEdges.length > 0) {
-      history.pushSnapshot()
-      for (const ed of selectedEdges) store.removeEdge(ed.id)
-      e.preventDefault()
-    }
-  }
-  if (e.key === 'F2') {
-    e.preventDefault()
-    if (store.activeCanvasId) {
-      renamingCanvasId.value = store.activeCanvasId
-    }
-  }
-}
-
-// ---- 绘图层渲染 ----
-onMounted(() => {
-  if (drawingCanvasRef.value) {
-    canvasCtx.value = drawingCanvasRef.value.getContext('2d')
-    window.addEventListener('resize', () => {
-      if (drawingCanvasRef.value && vueFlowRef.value) {
-        const container = vueFlowRef.value.$el as HTMLElement
-        drawingCanvasRef.value.width = container.clientWidth
-        drawingCanvasRef.value.height = container.clientHeight
-        renderDrawings()
-      }
-    })
-    setTimeout(() => window.dispatchEvent(new Event('resize')), 100)
-  }
-  onViewportChange(() => {
-    renderDrawings()
-  })
-})
-
-function renderDrawings() {
-  if (!canvasCtx.value || !drawingCanvasRef.value) return
-  const { x, y, zoom } = viewport.value
-  canvasCtx.value.clearRect(0, 0, drawingCanvasRef.value.width, drawingCanvasRef.value.height)
-  canvasCtx.value.save()
-  canvasCtx.value.translate(x, y)
-  canvasCtx.value.scale(zoom, zoom)
-  for (const draw of store.drawings) {
-    renderDrawingItem(draw)
-  }
-  if (store.drawingPreview) {
-    renderDrawingItem(store.drawingPreview)
-  }
-  canvasCtx.value.restore()
-}
-
-function renderDrawingItem(item: DrawingItem) {
-  if (!canvasCtx.value) return
-  canvasCtx.value.strokeStyle = item.color
-  canvasCtx.value.lineWidth = item.lineWidth
-  canvasCtx.value.lineCap = 'round'
-  canvasCtx.value.lineJoin = 'round'
-
-  switch (item.type) {
-    case 'line':
-      canvasCtx.value.beginPath()
-      canvasCtx.value.moveTo(item.points[0].x, item.points[0].y)
-      canvasCtx.value.lineTo(item.points[1].x, item.points[1].y)
-      canvasCtx.value.stroke()
-      break
-
-    case 'arrow':
-      if (item.points.length >= 2) {
-        const headLen = 16
-        const angle = Math.atan2(
-          item.points[1].y - item.points[0].y,
-          item.points[1].x - item.points[0].x,
-        )
-        const lineEnd = {
-          x: item.points[1].x - headLen * Math.cos(angle),
-          y: item.points[1].y - headLen * Math.sin(angle),
-        }
-        canvasCtx.value.beginPath()
-        canvasCtx.value.moveTo(item.points[0].x, item.points[0].y)
-        canvasCtx.value.lineTo(lineEnd.x, lineEnd.y)
-        canvasCtx.value.stroke()
-        drawArrowHead(item.points[1], angle, headLen)
-      }
-      break
-
-    case 'rect':
-      if (item.points.length >= 2) {
-        const x = Math.min(item.points[0].x, item.points[1].x)
-        const y = Math.min(item.points[0].y, item.points[1].y)
-        const width = Math.abs(item.points[1].x - item.points[0].x)
-        const height = Math.abs(item.points[1].y - item.points[0].y)
-        canvasCtx.value.strokeRect(x, y, width, height)
-      }
-      break
-
-    case 'circle':
-      if (item.points.length >= 2) {
-        const cx = (item.points[0].x + item.points[1].x) / 2
-        const cy = (item.points[0].y + item.points[1].y) / 2
-        const rx = Math.abs(item.points[1].x - item.points[0].x) / 2
-        const ry = Math.abs(item.points[1].y - item.points[0].y) / 2
-        canvasCtx.value.beginPath()
-        canvasCtx.value.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2)
-        canvasCtx.value.stroke()
-      }
-      break
-
-    case 'triangle':
-      if (item.points.length >= 2) {
-        const dx = item.points[1].x - item.points[0].x
-        const dy = item.points[1].y - item.points[0].y
-        canvasCtx.value.beginPath()
-        canvasCtx.value.moveTo(item.points[0].x, item.points[0].y)
-        canvasCtx.value.lineTo(item.points[1].x, item.points[1].y)
-        canvasCtx.value.lineTo(
-          item.points[0].x + dx / 2 - dy * 0.433,
-          item.points[0].y + dy / 2 + dx * 0.433,
-        )
-        canvasCtx.value.closePath()
-        canvasCtx.value.stroke()
-      }
-      break
-
-    case 'brace':
-      if (item.points.length >= 2) {
-        const x = Math.min(item.points[0].x, item.points[1].x)
-        const y = Math.min(item.points[0].y, item.points[1].y)
-        const w = Math.abs(item.points[1].x - item.points[0].x)
-        const h = Math.abs(item.points[1].y - item.points[0].y)
-        if (w > 10 && h > 10) {
-          canvasCtx.value.font = `${h}px sans-serif`
-          const metrics = canvasCtx.value.measureText('{')
-          const glyphH =
-            (metrics.actualBoundingBoxAscent ?? 0) + (metrics.actualBoundingBoxDescent ?? 0)
-          const glyphW = metrics.width
-          const scale = Math.min(w / glyphW, h / glyphH)
-          const fontSize = h * scale
-          canvasCtx.value.font = `${fontSize}px sans-serif`
-          canvasCtx.value.textBaseline = 'top'
-          canvasCtx.value.textAlign = 'center'
-          canvasCtx.value.fillStyle = item.color
-          canvasCtx.value.fillText('{', x + w / 2, y + (h - fontSize) / 2)
-        }
-      }
-      break
-
-    case 'pencil':
-      if (item.points.length >= 2) {
-        canvasCtx.value.beginPath()
-        canvasCtx.value.moveTo(item.points[0].x, item.points[0].y)
-        for (let i = 1; i < item.points.length; i++) {
-          canvasCtx.value.lineTo(item.points[i].x, item.points[i].y)
-        }
-        canvasCtx.value.stroke()
-      }
-      break
-  }
-}
-
-function drawArrowHead(
-  tip: { x: number; y: number },
-  angle: number,
-  headLength: number,
-) {
-  if (!canvasCtx.value) return
-  const x1 = tip.x - headLength * Math.cos(angle - Math.PI / 4)
-  const y1 = tip.y - headLength * Math.sin(angle - Math.PI / 4)
-  const x2 = tip.x - headLength * Math.cos(angle + Math.PI / 4)
-  const y2 = tip.y - headLength * Math.sin(angle + Math.PI / 4)
-  canvasCtx.value.beginPath()
-  canvasCtx.value.moveTo(x1, y1)
-  canvasCtx.value.lineTo(tip.x, tip.y)
-  canvasCtx.value.lineTo(x2, y2)
-  canvasCtx.value.closePath()
-  canvasCtx.value.fillStyle = canvasCtx.value.strokeStyle
-  canvasCtx.value.fill()
-}
-
-watch([() => store.drawings, () => store.drawingPreview], () => {
-  renderDrawings()
-}, { deep: true })
 </script>
 
 <template>
@@ -829,12 +478,12 @@ watch([() => store.drawings, () => store.drawingPreview], () => {
       </header>
       <div
         class="flex-1 relative outline-none"
+        tabindex="0"
         @dragover.prevent
         @drop="onDrop"
-        @mousedown.right="onCanvasRightDown"
+        @mousedown.right="rc.onCanvasRightDown"
         @click="closeContextMenu"
         @keydown="onKeyDown"
-        tabindex="0"
       >
         <VueFlow
           ref="vueFlowRef"
@@ -852,17 +501,17 @@ watch([() => store.drawings, () => store.drawingPreview], () => {
           :pan-on-drag="!store.activeDrawingTool"
           class="world-flow"
           @node-drag-stop="onNodeDragStop"
-          @edge-context-menu="onEdgeContextMenu"
+          @edge-context-menu="rc.handleEdgeContextMenu"
           @pane-click="onPaneClick"
           @contextmenu.prevent
         >
           <!-- 右键连线临时线 -->
           <svg
-            v-if="rightClick.state === 'connecting'"
+            v-if="rc.isConnecting.value"
             style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible;"
           >
             <path
-              :d="`M${rightClick.sourceX},${rightClick.sourceY} L${rightClick.cursorX},${rightClick.cursorY}`"
+              :d="`M${rc.connectLine.sourceX},${rc.connectLine.sourceY} L${rc.connectLine.cursorX},${rc.connectLine.cursorY}`"
               fill="none"
               stroke="#a78bfa"
               stroke-width="2"
@@ -875,11 +524,11 @@ watch([() => store.drawings, () => store.drawingPreview], () => {
             <UndoButton :can-undo="history.canUndo.value" @undo="history.undo()" />
             <div class="w-full h-px bg-zinc-800 my-1"></div>
             <button
-              v-for="tool in drawingTools"
+              v-for="tool in drawing.drawingTools"
               :key="tool.type"
               class="w-8 h-8 flex items-center justify-center rounded hover:bg-zinc-800 transition-colors text-sm"
               :class="store.activeDrawingTool === tool.type ? 'bg-violet-600 text-white' : 'text-zinc-400'"
-              @click.stop="switchDrawingTool(tool.type)"
+              @click.stop="drawing.switchDrawingTool(tool.type)"
               :title="tool.label"
             >
               {{ tool.icon }}
@@ -900,7 +549,7 @@ watch([() => store.drawings, () => store.drawingPreview], () => {
           <div
             v-if="store.activeDrawingTool"
             style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 20; cursor: crosshair;"
-            @mousedown="onDrawingOverlayDown"
+            @mousedown="drawing.onDrawingOverlayDown"
           />
 
           <template #pane>
