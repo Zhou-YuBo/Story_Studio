@@ -249,6 +249,7 @@ function onDrop(event: DragEvent) {
 
   history.pushSnapshot()
   store.addCard(inspirationId, position.x - 130, position.y - 20)
+  ;(event.currentTarget as HTMLElement)?.focus()
 }
 
 function onNodeDragStop({ node }: { node: { id: string; position: { x: number; y: number } } }) {
