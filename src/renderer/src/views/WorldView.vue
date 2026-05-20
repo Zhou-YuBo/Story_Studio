@@ -1,14 +1,22 @@
 <script setup lang="ts">
-import { computed, markRaw, reactive, ref, onMounted, watch } from 'vue'
+import { computed, markRaw, reactive, ref, onMounted, watch, provide } from 'vue'
 import { VueFlow, useVueFlow, SelectionMode } from '@vue-flow/core'
+import { storeToRefs } from 'pinia'
 import '@vue-flow/core/dist/style.css'
 import '@vue-flow/core/dist/theme-default.css'
 import { useWorldStore, type DrawingItem } from '../stores/world'
+import { useCanvasHistory } from '../composables/useCanvasHistory'
+import { canvasHistoryKey, type CanvasHistoryHandle } from '../composables/canvasHistoryKey'
 import WorldCard from '../components/WorldCard.vue'
 import CenterEdge from '../components/CenterEdge.vue'
 import ObjectDetailPanel from '../components/ObjectDetailPanel.vue'
+import UndoButton from '../components/UndoButton.vue'
 
 const store = useWorldStore()
+const storeRefs = storeToRefs(store)
+const history = useCanvasHistory({ cards: storeRefs.cards, edges: storeRefs.edges, drawings: storeRefs.drawings, dirty: storeRefs.dirty })
+provide(canvasHistoryKey, { beginBatch: history.beginBatch, endBatch: history.endBatch } satisfies CanvasHistoryHandle)
+
 const vueFlowRef = ref<InstanceType<typeof VueFlow>>()
 const drawingCanvasRef = ref<HTMLCanvasElement | null>(null)
 const canvasCtx = ref<CanvasRenderingContext2D | null>(null)
@@ -124,10 +132,17 @@ function handleNewCanvas() {
     store.newCanvas()
     leftTab.value = 'entries'
   })
+  history.clear()
 }
 
 function handleOpenCanvas(id: string) {
   store.requestAction(() => store.openCanvas(id))
+  history.clear()
+}
+
+function handleDeleteObject(id: string) {
+  history.pushSnapshot()
+  store.deleteObject(id)
 }
 
 function startRenameCanvas(id: string) {
@@ -213,6 +228,7 @@ function onDrawingMouseUp() {
 
 function finishDrawing() {
   if (store.isDrawing && store.drawingPreview) {
+    history.pushSnapshot()
     store.drawings.push(store.drawingPreview)
     store.dirty = true
   }
@@ -330,6 +346,7 @@ function finishConnecting(clientX: number, clientY: number) {
     }
   }
   if (targetId && targetId !== rightClick.sourceId) {
+    history.pushSnapshot()
     store.addEdge(rightClick.sourceId, targetId)
   }
 }
@@ -361,10 +378,12 @@ function onDrop(event: DragEvent) {
     x: event.clientX,
     y: event.clientY,
   })
+  history.pushSnapshot()
   store.addCard(objectId, position.x - 110, position.y - 20)
 }
 
 function onNodeDragStop({ node }: { node: { id: string; position: { x: number; y: number } } }) {
+  history.pushSnapshot()
   store.updateCardPosition(node.id, node.position.x, node.position.y)
 }
 
@@ -379,25 +398,11 @@ function onPaneClick(event: MouseEvent) {
     const uncat = store.categories.find((c) => c.name === '未分类')
     if (uncat) {
       const obj = store.createObject(uncat.id, '自由文本')
+      history.pushSnapshot()
       store.addCard(obj.id, pos.x - 110, pos.y - 20)
     }
   }
   lastPaneClickTime = now
-}
-
-// ---- 右键菜单 ----
-const contextMenu = reactive({
-  visible: false,
-  x: 0,
-  y: 0,
-  type: '' as 'node' | 'edge' | '',
-  targetId: '',
-  showColorPicker: false,
-})
-
-function closeContextMenu() {
-  contextMenu.visible = false
-  contextMenu.showColorPicker = false
 }
 
 // ---- 上下文菜单项 ----
@@ -411,12 +416,12 @@ const contextMenuItems = computed<ContextMenuItem[]>(() => {
   if (contextMenu.type === 'node') {
     return [
       { label: '修改颜色', action: () => { contextMenu.showColorPicker = true } },
-      { label: '删除', danger: true, action: () => { store.removeCard(contextMenu.targetId); closeContextMenu() } },
+      { label: '删除', danger: true, action: () => { history.pushSnapshot(); store.removeCard(contextMenu.targetId); closeContextMenu() } },
     ]
   }
   if (contextMenu.type === 'edge') {
     return [
-      { label: '删除', danger: true, action: () => { store.removeEdge(contextMenu.targetId); closeContextMenu() } },
+      { label: '删除', danger: true, action: () => { history.pushSnapshot(); store.removeEdge(contextMenu.targetId); closeContextMenu() } },
     ]
   }
   return []
@@ -429,20 +434,34 @@ function onCardColorInput(e: Event) {
   }
 }
 
+function onCardColorChange(e: Event) {
+  history.pushSnapshot()
+  onCardColorInput(e)
+}
+
 function resetCardColor() {
+  history.pushSnapshot()
   store.updateCardColor(contextMenu.targetId, undefined)
   contextMenu.showColorPicker = false
 }
 
 // ---- 键盘 ----
 function onKeyDown(e: KeyboardEvent) {
+  // Ctrl+Z: 撤回
+  if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+    e.preventDefault()
+    history.undo()
+    return
+  }
   if (e.key === 'Delete' || e.key === 'Backspace') {
     const selectedNodes = getSelectedNodes.value
     const selectedEdges = getSelectedEdges.value
     if (selectedNodes.length > 0) {
+      history.pushSnapshot()
       for (const n of selectedNodes) store.removeCard(n.id)
       e.preventDefault()
     } else if (selectedEdges.length > 0) {
+      history.pushSnapshot()
       for (const ed of selectedEdges) store.removeEdge(ed.id)
       e.preventDefault()
     }
@@ -703,7 +722,7 @@ watch([() => store.drawings, () => store.drawingPreview], () => {
               <div class="flex items-center gap-1 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" @click.stop>
                 <button class="text-zinc-600 hover:text-zinc-300 text-xs" title="对象颜色" @click="editingObjectColorId = editingObjectColorId === obj.id ? null : obj.id">&#9673;</button>
                 <button class="text-zinc-600 hover:text-zinc-300 text-xs" title="重命名" @click="startRenameObject(obj.id)">&#9998;</button>
-                <button class="text-zinc-600 hover:text-red-400 text-xs" title="删除" @click="store.deleteObject(obj.id)">&#10005;</button>
+                <button class="text-zinc-600 hover:text-red-400 text-xs" title="删除" @click="handleDeleteObject(obj.id)">&#10005;</button>
               </div>
             </div>
             <div v-if="editingObjectColorId && store.getObjectById(editingObjectColorId)?.categoryId === cat.id" class="px-3 pl-8 pb-2" @click.stop>
@@ -852,6 +871,8 @@ watch([() => store.drawings, () => store.drawingPreview], () => {
 
           <!-- 绘图工具栏 -->
           <div class="drawing-toolbar absolute bottom-6 right-6 bg-zinc-900 border border-zinc-800 rounded-lg p-2 flex flex-col gap-1 z-50">
+            <UndoButton :can-undo="history.canUndo.value" @undo="history.undo()" />
+            <div class="w-full h-px bg-zinc-800 my-1"></div>
             <button
               v-for="tool in drawingTools"
               :key="tool.type"
@@ -922,7 +943,7 @@ watch([() => store.drawings, () => store.drawingPreview], () => {
             :value="store.cards.find(c => c.id === contextMenu.targetId)?.color ?? store.resolveCardColor(contextMenu.targetId)"
             class="w-8 h-6 rounded cursor-pointer bg-transparent border border-zinc-700"
             @input="onCardColorInput"
-            @change="onCardColorInput"
+            @change="onCardColorChange"
           />
           <button class="text-xs text-zinc-500 hover:text-zinc-300" @click="resetCardColor">重置</button>
         </div>

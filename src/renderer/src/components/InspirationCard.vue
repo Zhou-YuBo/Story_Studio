@@ -1,7 +1,10 @@
 <script setup lang="ts">
-import { computed, ref, watch, onBeforeUnmount } from 'vue'
+import { computed, ref, watch, onBeforeUnmount, inject } from 'vue'
 import { Handle, Position, useVueFlow } from '@vue-flow/core'
 import { useInspirationStore, type InspirationItem } from '../stores/inspiration'
+import { canvasHistoryKey } from '../composables/canvasHistoryKey'
+
+const history = inject(canvasHistoryKey, null)
 
 const props = defineProps<{
   id: string
@@ -46,6 +49,7 @@ const dirConfig: Record<Dir, { cursor: string; wSign: number; hSign: number; mov
 function onResizeMouseDown(e: MouseEvent, dir: Dir) {
   e.preventDefault()
   e.stopPropagation()
+  history?.beginBatch()
   const zoom = getViewport().zoom || 1
   const startX = e.clientX
   const startY = e.clientY
@@ -70,6 +74,7 @@ function onResizeMouseDown(e: MouseEvent, dir: Dir) {
     }
   }
   function onUp() {
+    history?.endBatch()
     window.removeEventListener('mousemove', onMove)
     window.removeEventListener('mouseup', onUp)
   }

@@ -1,13 +1,21 @@
 <script setup lang="ts">
-import { computed, markRaw, reactive, ref, onMounted, watch } from 'vue'
+import { computed, markRaw, reactive, ref, onMounted, watch, provide } from 'vue'
 import { VueFlow, useVueFlow, SelectionMode } from '@vue-flow/core'
+import { storeToRefs } from 'pinia'
 import '@vue-flow/core/dist/style.css'
 import '@vue-flow/core/dist/theme-default.css'
 import { useInspirationStore, type InspirationItem, type DrawingItem } from '../stores/inspiration'
+import { useCanvasHistory } from '../composables/useCanvasHistory'
+import { canvasHistoryKey, type CanvasHistoryHandle } from '../composables/canvasHistoryKey'
 import InspirationCard from '../components/InspirationCard.vue'
 import CenterEdge from '../components/CenterEdge.vue'
+import UndoButton from '../components/UndoButton.vue'
 
 const store = useInspirationStore()
+const storeRefs = storeToRefs(store)
+const history = useCanvasHistory({ cards: storeRefs.cards, edges: storeRefs.edges, drawings: storeRefs.drawings, dirty: storeRefs.dirty })
+provide(canvasHistoryKey, { beginBatch: history.beginBatch, endBatch: history.endBatch } satisfies CanvasHistoryHandle)
+
 const vueFlowRef = ref<InstanceType<typeof VueFlow>>()
 const drawingCanvasRef = ref<HTMLCanvasElement | null>(null)
 const canvasCtx = ref<CanvasRenderingContext2D | null>(null)
@@ -69,6 +77,7 @@ function onPaneClick(event: MouseEvent) {
   if (now - lastPaneClickTime < 350) {
     const pos = screenToFlowCoordinate({ x: event.clientX, y: event.clientY })
     const item = store.createTextItem()
+    history.pushSnapshot()
     store.addCard(item.id, pos.x - 130, pos.y - 20)
   }
   lastPaneClickTime = now
@@ -114,6 +123,7 @@ function onDrawingMouseUp() {
 
 function finishDrawing() {
   if (store.isDrawing && store.drawingPreview) {
+    history.pushSnapshot()
     store.drawings.push(store.drawingPreview)
     store.dirty = true
   }
@@ -188,6 +198,7 @@ function finishConnecting(clientX: number, clientY: number) {
   }
 
   if (targetId && targetId !== connecting.sourceId) {
+    history.pushSnapshot()
     store.addEdge(connecting.sourceId, targetId)
   }
 
@@ -236,16 +247,19 @@ function onDrop(event: DragEvent) {
     y: event.clientY,
   })
 
+  history.pushSnapshot()
   store.addCard(inspirationId, position.x - 130, position.y - 20)
 }
 
 function onNodeDragStop({ node }: { node: { id: string; position: { x: number; y: number } } }) {
+  history.pushSnapshot()
   store.updateCardPosition(node.id, node.position.x, node.position.y)
 }
 
 // ---- 画布切换（带未保存提醒） ----
 function handleOpenCanvas(id: string) {
   store.requestAction(() => store.openCanvas(id))
+  history.clear()
 }
 
 function handleNewCanvas() {
@@ -253,6 +267,7 @@ function handleNewCanvas() {
     store.newCanvas()
     leftTab.value = 'materials'
   })
+  history.clear()
 }
 
 // ---- 右键菜单 ----
@@ -289,6 +304,7 @@ function closeContextMenu() {
 }
 
 function deleteContextTarget() {
+  history.pushSnapshot()
   if (contextMenu.type === 'node') store.removeCard(contextMenu.targetId)
   if (contextMenu.type === 'edge') store.removeEdge(contextMenu.targetId)
   closeContextMenu()
@@ -459,6 +475,12 @@ watch([() => store.drawings, () => store.drawingPreview], () => {
 
 // ---- 键盘快捷键 ----
 function onKeyDown(e: KeyboardEvent) {
+  // Ctrl+Z: 撤回
+  if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+    e.preventDefault()
+    history.undo()
+    return
+  }
   // Delete / Backspace：删除选中的卡片或连线
   if (e.key === 'Delete' || e.key === 'Backspace') {
     // 避免在输入框里误删
@@ -468,9 +490,11 @@ function onKeyDown(e: KeyboardEvent) {
     const selectedEdges = getSelectedEdges.value
 
     if (selectedNodes.length > 0) {
+      history.pushSnapshot()
       for (const n of selectedNodes) store.removeCard(n.id)
       e.preventDefault()
     } else if (selectedEdges.length > 0) {
+      history.pushSnapshot()
       for (const ed of selectedEdges) store.removeEdge(ed.id)
       e.preventDefault()
     }
@@ -754,6 +778,8 @@ function formatDateTime(iso: string): string {
 
           <!-- 绘图工具栏 -->
           <div class="drawing-toolbar absolute bottom-6 right-6 bg-zinc-900 border border-zinc-800 rounded-lg p-2 flex flex-col gap-1 z-50">
+            <UndoButton :can-undo="history.canUndo.value" @undo="history.undo()" />
+            <div class="w-full h-px bg-zinc-800 my-1"></div>
             <button
               v-for="tool in drawingTools"
               :key="tool.type"
