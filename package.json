@@ -23,6 +23,9 @@
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/utils": "^4.0.0",
+    "@tiptap/pm": "^3.23.5",
+    "@tiptap/starter-kit": "^3.23.5",
+    "@tiptap/vue-3": "^3.23.5",
     "@vue-flow/core": "^1.48.2",
     "pinia": "^3.0.4",
     "vue-router": "^4.6.4"

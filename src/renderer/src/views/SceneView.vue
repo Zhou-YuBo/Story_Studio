@@ -1,5 +1,9 @@
+<script setup lang="ts">
+import SceneEditor from '../components/editor/SceneEditor.vue'
+</script>
+
 <template>
-  <div class="w-full h-full flex items-center justify-center">
-    <div class="text-zinc-600 text-2xl">场景工作台</div>
+  <div class="w-full h-full">
+    <SceneEditor />
   </div>
 </template>
