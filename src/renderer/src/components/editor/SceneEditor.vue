@@ -18,6 +18,11 @@ import { EndOfAct } from './extensions/end-of-act'
 import { Sequence } from './extensions/sequence'
 import { ScreenplayBehavior } from './extensions/screenplay-behavior'
 import { PaginationDecoration } from './extensions/pagination-decoration'
+import { SmartType } from './extensions/smart-type'
+import { createSmartTypeState } from './smarttype/state'
+import SmartTypeDropdown from './SmartTypeDropdown.vue'
+
+const smartTypeState = createSmartTypeState()
 
 const STORAGE_KEY = 'story-studio-scene-doc'
 
@@ -68,6 +73,7 @@ const editor = useEditor({
       hardBreak: false,
     }),
     ...screenplayElements,
+    SmartType.configure({ state: smartTypeState }),
     ScreenplayBehavior,
     PaginationDecoration
   ],
@@ -223,6 +229,7 @@ function onPickerKeydown(e: KeyboardEvent) {
         </div>
       </Teleport>
     </div>
+    <SmartTypeDropdown :state="smartTypeState" />
   </div>
 </template>
 
@@ -397,6 +404,16 @@ function onPickerKeydown(e: KeyboardEvent) {
   padding-right: 182px;
   font-style: italic;
   line-height: 16px;
+}
+
+.page-container :deep(.screenplay-parenthetical.is-empty) {
+  display: flex;
+  align-items: baseline;
+}
+
+.page-container :deep(.screenplay-parenthetical.is-empty .parenthetical-content) {
+  flex: 0;
+  min-width: 1px;
 }
 
 .page-container :deep(.screenplay-transition) {
