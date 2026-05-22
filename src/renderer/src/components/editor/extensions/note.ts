@@ -32,7 +32,7 @@ export const Note = Node.create({
       toggleNote:
         () =>
         ({ commands }) => {
-          return commands.toggleNode('note', 'paragraph')
+          return commands.toggleNode('note', 'general')
         },
     }
   },

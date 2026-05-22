@@ -32,7 +32,7 @@ export const Character = Node.create({
       toggleCharacter:
         () =>
         ({ commands }) => {
-          return commands.toggleNode('character', 'paragraph')
+          return commands.toggleNode('character', 'general')
         },
     }
   },

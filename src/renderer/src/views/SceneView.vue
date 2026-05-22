@@ -3,7 +3,7 @@ import SceneEditor from '../components/editor/SceneEditor.vue'
 </script>
 
 <template>
-  <div class="w-full h-full">
+  <div class="flex-1 flex overflow-hidden">
     <SceneEditor />
   </div>
 </template>

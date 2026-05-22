@@ -32,7 +32,7 @@ export const Parenthetical = Node.create({
       toggleParenthetical:
         () =>
         ({ commands }) => {
-          return commands.toggleNode('parenthetical', 'paragraph')
+          return commands.toggleNode('parenthetical', 'general')
         },
     }
   },

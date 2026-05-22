@@ -32,7 +32,7 @@ export const Action = Node.create({
       toggleAction:
         () =>
         ({ commands }) => {
-          return commands.toggleNode('action', 'paragraph')
+          return commands.toggleNode('action', 'general')
         },
     }
   },

@@ -8,22 +8,32 @@ const pluginKey = new PluginKey('screenplayBehavior')
 type Transition = 'picker' | 'block' | 'SAME' | null | string
 
 const ENTER: Record<string, { empty: Transition; mid: Transition; end: Transition }> = {
+  general: { empty: 'picker', mid: 'SAME', end: 'SAME' },
   sceneHeading: { empty: 'picker', mid: 'block', end: 'action' },
   action: { empty: 'picker', mid: 'SAME', end: 'SAME' },
   character: { empty: 'picker', mid: 'block', end: 'dialogue' },
-  dialogue: { empty: 'picker', mid: 'SAME', end: 'action' },
   parenthetical: { empty: 'picker', mid: 'block', end: 'dialogue' },
-  note: { empty: 'picker', mid: 'SAME', end: 'block' }
+  dialogue: { empty: 'picker', mid: 'SAME', end: 'action' },
+  transition: { empty: 'picker', mid: 'block', end: 'sceneHeading' },
+  shot: { empty: 'picker', mid: 'SAME', end: 'action' },
+  castList: { empty: 'picker', mid: 'block', end: 'action' },
+  summary: { empty: 'picker', mid: 'SAME', end: 'SAME' },
+  note: { empty: 'picker', mid: 'SAME', end: 'summary' },
 }
 
-const TAB: Record<string, { empty: Transition; content: Transition }> = {
-  sceneHeading: { empty: 'action', content: null },
-  action: { empty: 'character', content: 'SAME' },
-  character: { empty: null, content: 'parenthetical' },
-  dialogue: { empty: 'parenthetical', content: 'parenthetical' },
-  parenthetical: { empty: 'dialogue', content: 'dialogue' },
-  note: { empty: null, content: null },
-  paragraph: { empty: 'action', content: null }
+// Tab mid 对所有元素均为 PASS，故只存 empty 和 end
+const TAB: Record<string, { empty: Transition; end: Transition }> = {
+  general: { empty: null, end: 'SAME' },
+  sceneHeading: { empty: 'action', end: null },
+  action: { empty: 'character', end: 'SAME' },
+  character: { empty: 'transition', end: 'parenthetical' },
+  parenthetical: { empty: 'dialogue', end: 'dialogue' },
+  dialogue: { empty: 'parenthetical', end: 'parenthetical' },
+  transition: { empty: 'sceneHeading', end: 'sceneHeading' },
+  shot: { empty: 'action', end: 'action' },
+  castList: { empty: 'action', end: 'action' },
+  summary: { empty: 'note', end: 'SAME' },
+  note: { empty: 'summary', end: 'summary' },
 }
 
 export const ScreenplayBehavior = Extension.create({
@@ -54,7 +64,13 @@ export const ScreenplayBehavior = Extension.create({
               event.preventDefault()
               const rule = TAB[type]
               if (!rule) return false
-              transition = empty ? rule.empty : rule.content
+              if (empty) {
+                transition = rule.empty
+              } else if (atEnd) {
+                transition = rule.end
+              } else {
+                return false
+              }
             } else {
               return false
             }

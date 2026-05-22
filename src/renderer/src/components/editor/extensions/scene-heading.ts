@@ -32,7 +32,7 @@ export const SceneHeading = Node.create({
       toggleSceneHeading:
         () =>
         ({ commands }) => {
-          return commands.toggleNode('sceneHeading', 'paragraph')
+          return commands.toggleNode('sceneHeading', 'general')
         },
     }
   },

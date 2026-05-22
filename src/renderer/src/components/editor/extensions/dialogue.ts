@@ -32,7 +32,7 @@ export const Dialogue = Node.create({
       toggleDialogue:
         () =>
         ({ commands }) => {
-          return commands.toggleNode('dialogue', 'paragraph')
+          return commands.toggleNode('dialogue', 'general')
         },
     }
   },
