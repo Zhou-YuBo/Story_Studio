@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, ref, watch, inject } from 'vue'
 import { Handle, Position, useVueFlow } from '@vue-flow/core'
-import { useWorldStore } from '../stores/world'
-import { canvasHistoryKey } from '../composables/canvasHistoryKey'
+import { useWorldStore } from '../../stores/world'
+import { canvasHistoryKey } from '../../composables/canvasHistoryKey'
 
 const props = defineProps<{
   id: string

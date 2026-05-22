@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
-import { useWorldStore, type ObjectDetailState } from '../stores/world'
+import { useWorldStore, type ObjectDetailState } from '../../stores/world'
 
 const props = defineProps<{
   detail: ObjectDetailState

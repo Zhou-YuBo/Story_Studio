@@ -64,19 +64,19 @@ const positionStyle = () => {
 .smarttype-dropdown {
   background: #1e1e2e;
   border: 1px solid #444;
-  border-radius: 6px;
-  padding: 4px 0;
-  min-width: 160px;
-  max-width: 300px;
-  max-height: 280px;
+  border-radius: 4px;
+  padding: 2px 0;
+  min-width: 120px;
+  max-width: 220px;
+  max-height: 200px;
   overflow-y: auto;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
   font-family: 'Courier Prime', 'Courier New', monospace;
-  font-size: 13px;
+  font-size: 11px;
 }
 
 .smarttype-item {
-  padding: 6px 12px;
+  padding: 3px 8px;
   color: #ddd;
   cursor: pointer;
   white-space: nowrap;

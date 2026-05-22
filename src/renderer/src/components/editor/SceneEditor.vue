@@ -128,14 +128,18 @@ function toggleElement(type: string) {
 // 元素选择框（空行 Enter 触发）
 const elementPickerVisible = ref(false)
 const pickerRef = ref<HTMLDivElement | null>(null)
+const pickerPosition = ref({ top: 0, left: 0 })
+const pickerSelectedIndex = ref(0)
 
 onMounted(() => {
   if (!editor.value) return
   editor.value.on('empty-enter' as any, () => {
+    const { from } = editor.value!.state.selection
+    const coords = editor.value!.view.coordsAtPos(from)
+    pickerPosition.value = { top: coords.bottom + 4, left: coords.left }
+    pickerSelectedIndex.value = 0
     elementPickerVisible.value = true
-    nextTick(() => {
-      pickerRef.value?.focus()
-    })
+    nextTick(() => pickerRef.value?.focus())
   })
 })
 
@@ -145,7 +149,37 @@ function selectElementFromPicker(type: string) {
   elementPickerVisible.value = false
 }
 
+function pickerStyle() {
+  const { top, left } = pickerPosition.value
+  return {
+    position: 'fixed' as const,
+    top: `${Math.max(0, Math.min(top, window.innerHeight - 400))}px`,
+    left: `${Math.max(0, Math.min(left, window.innerWidth - 220))}px`,
+    zIndex: 1000,
+  }
+}
+
 function onPickerKeydown(e: KeyboardEvent) {
+  if (e.key === 'ArrowDown') {
+    e.preventDefault()
+    pickerSelectedIndex.value = (pickerSelectedIndex.value + 1) % elementButtons.length
+    return
+  }
+  if (e.key === 'ArrowUp') {
+    e.preventDefault()
+    pickerSelectedIndex.value = (pickerSelectedIndex.value - 1 + elementButtons.length) % elementButtons.length
+    return
+  }
+  if (e.key === 'Enter') {
+    e.preventDefault()
+    selectElementFromPicker(elementButtons[pickerSelectedIndex.value].type)
+    return
+  }
+  if (e.key === 'Escape') {
+    elementPickerVisible.value = false
+    editor.value?.commands.focus()
+    return
+  }
   const keyMap: Record<string, string> = {
     g: 'general',
     s: 'sceneHeading',
@@ -163,9 +197,6 @@ function onPickerKeydown(e: KeyboardEvent) {
   if (target) {
     e.preventDefault()
     selectElementFromPicker(target)
-  } else if (e.key === 'Escape') {
-    elementPickerVisible.value = false
-    editor.value?.commands.focus()
   }
 }
 </script>
@@ -211,20 +242,23 @@ function onPickerKeydown(e: KeyboardEvent) {
       <Teleport to="body">
         <div
           v-if="elementPickerVisible"
-          class="element-picker-overlay"
-          @click="elementPickerVisible = false"
+          class="element-picker"
+          :style="pickerStyle()"
+          @click.stop
+          @mousedown.prevent
+          @keydown="onPickerKeydown"
+          tabindex="0"
+          ref="pickerRef"
         >
-          <div class="element-picker" @click.stop @keydown="onPickerKeydown" tabindex="0" ref="pickerRef">
-            <div class="picker-title">Elements</div>
-            <button
-              v-for="btn in elementButtons"
-              :key="btn.type"
-              class="picker-item"
-              @click="selectElementFromPicker(btn.type)"
-            >
-              <span class="picker-shortcut">{{ btn.shortcut }}</span>
-              <span class="picker-label">{{ btn.label }}</span>
-            </button>
+          <div
+            v-for="(btn, i) in elementButtons"
+            :key="btn.type"
+            :class="['picker-item', { selected: i === pickerSelectedIndex }]"
+            @mouseenter="pickerSelectedIndex = i"
+            @click="selectElementFromPicker(btn.type)"
+          >
+            <span class="picker-shortcut">{{ btn.shortcut }}</span>
+            <span class="picker-label">{{ btn.label }}</span>
           </div>
         </div>
       </Teleport>
@@ -500,61 +534,49 @@ function onPickerKeydown(e: KeyboardEvent) {
 }
 
 /* 元素选择框 */
-.element-picker-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.4);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-}
-
 .element-picker {
   background: #1e1e2e;
   border: 1px solid #444;
-  border-radius: 8px;
-  padding: 16px;
-  min-width: 200px;
+  border-radius: 4px;
+  padding: 2px 0;
+  min-width: 140px;
+  overflow-y: auto;
   outline: none;
-}
-
-.picker-title {
-  font-size: 14px;
-  font-weight: 700;
-  color: #888;
-  margin-bottom: 8px;
-  text-align: center;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
 }
 
 .picker-item {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 6px;
   width: 100%;
-  padding: 8px 12px;
+  padding: 3px 8px;
   border: none;
-  border-radius: 4px;
+  border-radius: 0;
   background: transparent;
   color: #ddd;
-  font-size: 14px;
+  font-size: 11px;
   cursor: pointer;
-  transition: background 0.1s;
+}
+
+.picker-item.selected {
+  background: #333;
+  color: #fff;
 }
 
 .picker-item:hover {
-  background: #333;
+  background: #2a2a3e;
 }
 
 .picker-shortcut {
-  width: 24px;
-  height: 24px;
+  width: 16px;
+  height: 16px;
   display: flex;
   align-items: center;
   justify-content: center;
   border: 1px solid #555;
-  border-radius: 4px;
-  font-size: 12px;
+  border-radius: 3px;
+  font-size: 9px;
   font-weight: 700;
   color: #7aa2f7;
   flex-shrink: 0;

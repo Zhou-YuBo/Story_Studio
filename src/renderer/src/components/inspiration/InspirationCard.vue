@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, ref, watch, onBeforeUnmount, inject } from 'vue'
 import { Handle, Position, useVueFlow } from '@vue-flow/core'
-import { useInspirationStore, type InspirationItem } from '../stores/inspiration'
-import { canvasHistoryKey } from '../composables/canvasHistoryKey'
+import { useInspirationStore, type InspirationItem } from '../../stores/inspiration'
+import { canvasHistoryKey } from '../../composables/canvasHistoryKey'
 
 const history = inject(canvasHistoryKey, null)
 
