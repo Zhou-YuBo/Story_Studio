@@ -10,10 +10,13 @@ import { canvasHistoryKey, type CanvasHistoryHandle } from '../composables/canva
 import { useRightClickConnect } from '../composables/useRightClickConnect'
 import { useDrawingTool } from '../composables/useDrawingTool'
 import { useCanvasShortcuts } from '../composables/useCanvasShortcuts'
-import WorldCard from '../components/WorldCard.vue'
-import CenterEdge from '../components/CenterEdge.vue'
-import ObjectDetailPanel from '../components/ObjectDetailPanel.vue'
-import UndoButton from '../components/UndoButton.vue'
+import WorldCard from '../components/world/WorldCard.vue'
+import CenterEdge from '../components/common/CenterEdge.vue'
+import ObjectDetailPanel from '../components/world/ObjectDetailPanel.vue'
+import CanvasTabList from '../components/common/CanvasTabList.vue'
+import DrawingToolbar from '../components/common/DrawingToolbar.vue'
+import ConfirmDialog from '../components/common/ConfirmDialog.vue'
+import CanvasHeader from '../components/common/CanvasHeader.vue'
 
 const store = useWorldStore()
 const storeRefs = storeToRefs(store)
@@ -420,62 +423,22 @@ function onPaneClick(event: MouseEvent) {
       </div>
 
       <!-- 画布 Tab -->
-      <div v-show="leftTab === 'canvases'" class="flex-1 overflow-y-auto">
-        <div class="p-2">
-          <button class="w-full h-9 rounded bg-zinc-800 hover:bg-zinc-700 text-sm text-zinc-300 transition-colors" @click="handleNewCanvas()">
-            + 新建画布
-          </button>
-        </div>
-        <div
-          v-for="canvas in store.canvases"
-          :key="canvas.id"
-          class="flex items-center gap-2 px-3 py-2.5 border-b border-zinc-800/50 cursor-pointer hover:bg-zinc-800/40 transition-colors"
-          :class="{ 'bg-zinc-800/60': store.activeCanvasId === canvas.id }"
-          @click="handleOpenCanvas(canvas.id)"
-          @dblclick.stop="startRenameCanvas(canvas.id)"
-        >
-          <div class="flex-1 min-w-0">
-            <input
-              v-if="renamingCanvasId === canvas.id"
-              :value="canvas.name"
-              class="w-full bg-zinc-800 text-sm text-zinc-200 px-1 py-0.5 rounded border border-zinc-600 outline-none"
-              @keydown.enter="finishRenameCanvas(canvas.id, $event)"
-              @blur="finishRenameCanvas(canvas.id, $event)"
-              @click.stop
-            />
-            <template v-else>
-              <div class="text-sm text-zinc-300 truncate">{{ canvas.name }}</div>
-              <div class="text-xs text-zinc-600 mt-0.5">{{ canvas.cards.length }} 张卡片</div>
-            </template>
-          </div>
-          <button
-            v-if="renamingCanvasId !== canvas.id"
-            class="text-zinc-600 hover:text-red-400 transition-colors text-xs flex-shrink-0"
-            title="删除画布"
-            @click.stop="store.deleteCanvas(canvas.id)"
-          >&#10005;</button>
-        </div>
-        <div v-if="store.canvases.length === 0" class="px-3 py-6 text-center text-zinc-600 text-sm">
-          暂无保存的画布
-        </div>
-      </div>
+      <CanvasTabList
+        v-show="leftTab === 'canvases'"
+        :canvases="store.canvases"
+        :active-canvas-id="store.activeCanvasId"
+        :renaming-canvas-id="renamingCanvasId"
+        @new="handleNewCanvas()"
+        @open="handleOpenCanvas($event)"
+        @start-rename="startRenameCanvas($event)"
+        @finish-rename="(id, e) => finishRenameCanvas(id, e)"
+        @delete="store.deleteCanvas($event)"
+      />
     </aside>
 
     <!-- 右侧画布区 -->
     <main class="flex-1 bg-zinc-900 flex flex-col min-w-0">
-      <header class="h-10 flex items-center justify-between px-3 border-b border-zinc-800 flex-shrink-0">
-        <span class="text-sm text-zinc-400 tracking-wide">{{ activeCanvasName }}</span>
-        <div class="flex items-center gap-2">
-          <span v-if="store.dirty" class="text-xs text-zinc-500">未保存</span>
-          <button
-            class="px-3 h-7 rounded text-xs transition-colors"
-            :class="store.dirty ? 'bg-violet-600 hover:bg-violet-500 text-white' : 'bg-zinc-800 text-zinc-500'"
-            @click="store.saveCurrentCanvas()"
-          >
-            保存
-          </button>
-        </div>
-      </header>
+      <CanvasHeader :name="activeCanvasName" :dirty="store.dirty" @save="store.saveCurrentCanvas()" />
       <div
         class="flex-1 relative outline-none"
         tabindex="0"
@@ -520,24 +483,14 @@ function onPaneClick(event: MouseEvent) {
           </svg>
 
           <!-- 绘图工具栏 -->
-          <div class="drawing-toolbar absolute bottom-6 right-6 bg-zinc-900 border border-zinc-800 rounded-lg p-2 flex flex-col gap-1 z-50">
-            <UndoButton :can-undo="history.canUndo.value" @undo="history.undo()" />
-            <div class="w-full h-px bg-zinc-800 my-1"></div>
-            <button
-              v-for="tool in drawing.drawingTools"
-              :key="tool.type"
-              class="w-8 h-8 flex items-center justify-center rounded hover:bg-zinc-800 transition-colors text-sm"
-              :class="store.activeDrawingTool === tool.type ? 'bg-violet-600 text-white' : 'text-zinc-400'"
-              @click.stop="drawing.switchDrawingTool(tool.type)"
-              :title="tool.label"
-            >
-              {{ tool.icon }}
-            </button>
-            <div class="w-full h-px bg-zinc-800 my-1"></div>
-            <input type="color" v-model="store.drawingConfig.color" class="w-8 h-8 rounded border-0 cursor-pointer" title="线条颜色" />
-            <div class="w-full h-px bg-zinc-800 my-1"></div>
-            <input type="range" v-model="store.drawingConfig.lineWidth" min="1" max="10" class="w-8 h-12 -rotate-90 origin-center" title="线条宽度" />
-          </div>
+          <DrawingToolbar
+            :tools="drawing.drawingTools"
+            :active-tool="store.activeDrawingTool"
+            :config="store.drawingConfig"
+            :can-undo="history.canUndo.value"
+            @switch-tool="drawing.switchDrawingTool($event)"
+            @undo="history.undo()"
+          />
 
           <!-- 绘图层 Canvas -->
           <canvas
@@ -601,20 +554,12 @@ function onPaneClick(event: MouseEvent) {
     </div>
 
     <!-- 未保存确认弹窗 -->
-    <div
-      v-if="store.confirmDialog"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
-    >
-      <div class="bg-zinc-900 border border-zinc-700 rounded-lg p-6 w-80 shadow-xl">
-        <div class="text-sm text-zinc-200 mb-1">画布有未保存的改动</div>
-        <div class="text-xs text-zinc-500 mb-5">离开前是否保存当前画布？</div>
-        <div class="flex gap-3">
-          <button class="flex-1 h-8 rounded bg-violet-600 hover:bg-violet-500 text-white text-xs transition-colors" @click="store.confirmSave()">保存</button>
-          <button class="flex-1 h-8 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs transition-colors" @click="store.confirmDiscard()">不保存</button>
-          <button class="flex-1 h-8 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-500 text-xs transition-colors" @click="store.confirmCancel()">取消</button>
-        </div>
-      </div>
-    </div>
+    <ConfirmDialog
+      :visible="!!store.confirmDialog"
+      @save="store.confirmSave()"
+      @discard="store.confirmDiscard()"
+      @cancel="store.confirmCancel()"
+    />
 
   </div>
 </template>

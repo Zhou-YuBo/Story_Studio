@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import BottomDock from './components/BottomDock.vue'
+import BottomDock from './components/common/BottomDock.vue'
 </script>
 
 <template>
