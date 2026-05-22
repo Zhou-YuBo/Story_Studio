@@ -91,7 +91,7 @@ export const ScreenplayBehavior = Extension.create({
                 .run()
             }
             if (transition === 'SAME') {
-              return editor.chain().focus().splitBlock().run()
+              return editor.chain().focus().splitBlock().setNode(type).run()
             }
             return editor.chain().focus().splitBlock().setNode(transition).run()
           }

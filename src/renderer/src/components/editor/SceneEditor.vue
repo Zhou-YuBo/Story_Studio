@@ -204,36 +204,36 @@ function onPickerKeydown(e: KeyboardEvent) {
 <template>
   <div class="scene-editor">
     <div v-if="editor" class="toolbar">
-      <div class="toolbar-group">
-        <button
-          v-for="btn in elementButtons"
-          :key="btn.type"
-          :class="{ active: editor.isActive(btn.type) }"
-          @click="toggleElement(btn.type)"
-          :title="btn.label"
-          class="element-btn"
-        >
-          {{ btn.label }}
-        </button>
+        <div class="toolbar-group">
+          <button
+            v-for="btn in elementButtons"
+            :key="btn.type"
+            :class="{ active: editor.isActive(btn.type) }"
+            @click="toggleElement(btn.type)"
+            :title="btn.label"
+            class="element-btn"
+          >
+            {{ btn.label }}
+          </button>
+        </div>
+        <div class="toolbar-divider" />
+        <div class="toolbar-group">
+          <button
+            :class="{ active: editor.isActive('bold') }"
+            @click="editor.chain().focus().toggleBold().run()"
+            title="加粗"
+          >
+            B
+          </button>
+          <button
+            :class="{ active: editor.isActive('italic') }"
+            @click="editor.chain().focus().toggleItalic().run()"
+            title="斜体"
+          >
+            I
+          </button>
+        </div>
       </div>
-      <div class="toolbar-divider" />
-      <div class="toolbar-group">
-        <button
-          :class="{ active: editor.isActive('bold') }"
-          @click="editor.chain().focus().toggleBold().run()"
-          title="加粗"
-        >
-          B
-        </button>
-        <button
-          :class="{ active: editor.isActive('italic') }"
-          @click="editor.chain().focus().toggleItalic().run()"
-          title="斜体"
-        >
-          I
-        </button>
-      </div>
-    </div>
     <div class="editor-scroll">
       <div class="page-container">
         <EditorContent :editor="editor" />
@@ -302,7 +302,6 @@ function onPickerKeydown(e: KeyboardEvent) {
   flex-direction: column;
   flex: 1;
   min-height: 0;
-  width: 100%;
 }
 
 .toolbar {
@@ -310,7 +309,6 @@ function onPickerKeydown(e: KeyboardEvent) {
   align-items: center;
   gap: 4px;
   padding: 6px 12px;
-  border-bottom: 1px solid #333;
   background: #1a1a1a;
   flex-shrink: 0;
 }
@@ -355,25 +353,21 @@ function onPickerKeydown(e: KeyboardEvent) {
   border-color: #666;
 }
 
-/* 编辑区域：暗色背景滚动容器 */
+/* 编辑区域：滚动容器 */
 .editor-scroll {
   flex: 1;
   overflow-y: auto;
   background: #2a2a2a;
-  padding: 40px 0;
-  display: flex;
-  justify-content: center;
-  align-items: flex-start;
+  padding: 20px 0;
 }
 
 /* 白色页面容器 */
 .page-container {
-  width: 8.5in;
+  width: 100%;
   min-height: 11in;
-  background: #fff;
+  background: #e8e0d0;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
   padding: 1in 1in 1in 1.5in;
-  flex-shrink: 0;
 }
 
 /* 编辑器主体 */
