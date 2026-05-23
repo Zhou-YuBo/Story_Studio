@@ -2,6 +2,8 @@
 import { useEditor, EditorContent } from '@tiptap/vue-3'
 import StarterKit from '@tiptap/starter-kit'
 import { ref, onBeforeUnmount, onMounted, watchEffect, nextTick } from 'vue'
+import { useEditorBridge } from '../../stores/editor-bridge'
+import { useStructureSync } from '../../composables/useStructureSync'
 import { General } from './extensions/general'
 import { SceneHeading } from './extensions/scene-heading'
 import { Action } from './extensions/action'
@@ -19,10 +21,13 @@ import { Sequence } from './extensions/sequence'
 import { ScreenplayBehavior } from './extensions/screenplay-behavior'
 import { PaginationDecoration } from './extensions/pagination-decoration'
 import { SmartType } from './extensions/smart-type'
+import { BeatShortcut } from './extensions/beat-shortcut'
 import { createSmartTypeState } from './smarttype/state'
 import SmartTypeDropdown from './SmartTypeDropdown.vue'
 
 const smartTypeState = createSmartTypeState()
+const editorBridge = useEditorBridge()
+const scrollRef = ref<HTMLElement | null>(null)
 
 const STORAGE_KEY = 'story-studio-scene-doc'
 
@@ -74,6 +79,7 @@ const editor = useEditor({
     }),
     ...screenplayElements,
     SmartType.configure({ state: smartTypeState }),
+    BeatShortcut,
     ScreenplayBehavior,
     PaginationDecoration
   ],
@@ -83,6 +89,8 @@ const editor = useEditor({
     },
   },
 })
+
+useStructureSync(editor)
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -98,6 +106,7 @@ watchEffect(() => {
 
 onBeforeUnmount(() => {
   if (saveTimer) clearTimeout(saveTimer)
+  editorBridge.unregister()
   editor.value?.destroy()
 })
 
@@ -133,6 +142,9 @@ const pickerSelectedIndex = ref(0)
 
 onMounted(() => {
   if (!editor.value) return
+  if (scrollRef.value) {
+    editorBridge.register(editor.value, scrollRef.value)
+  }
   editor.value.on('empty-enter' as any, () => {
     const { from } = editor.value!.state.selection
     const coords = editor.value!.view.coordsAtPos(from)
@@ -234,7 +246,7 @@ function onPickerKeydown(e: KeyboardEvent) {
           </button>
         </div>
       </div>
-    <div class="editor-scroll">
+    <div class="editor-scroll" ref="scrollRef">
       <div class="page-container">
         <EditorContent :editor="editor" />
       </div>

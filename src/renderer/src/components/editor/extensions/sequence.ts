@@ -14,6 +14,21 @@ export const Sequence = Node.create({
   group: 'block',
   content: 'inline*',
 
+  addAttributes() {
+    return {
+      actId: {
+        default: '',
+        parseHTML: (el) => el.getAttribute('data-act-id') || '',
+        renderHTML: (attrs) => (attrs.actId ? { 'data-act-id': attrs.actId } : {}),
+      },
+      seqId: {
+        default: '',
+        parseHTML: (el) => el.getAttribute('data-seq-id') || '',
+        renderHTML: (attrs) => (attrs.seqId ? { 'data-seq-id': attrs.seqId } : {}),
+      },
+    }
+  },
+
   parseHTML() {
     return [{ tag: 'div.screenplay-sequence' }]
   },

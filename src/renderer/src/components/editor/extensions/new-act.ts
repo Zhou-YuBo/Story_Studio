@@ -14,6 +14,16 @@ export const NewAct = Node.create({
   group: 'block',
   content: 'inline*',
 
+  addAttributes() {
+    return {
+      actId: {
+        default: '',
+        parseHTML: (el) => el.getAttribute('data-act-id') || '',
+        renderHTML: (attrs) => (attrs.actId ? { 'data-act-id': attrs.actId } : {}),
+      },
+    }
+  },
+
   parseHTML() {
     return [{ tag: 'div.screenplay-new-act' }]
   },
