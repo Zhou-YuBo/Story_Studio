@@ -1,34 +1,16 @@
 import { watch, type ShallowRef } from 'vue'
 import type { Editor } from '@tiptap/vue-3'
-import { useStructureStore, type StructureAct } from '../stores/structure'
 import type { Node as PmNode } from '@tiptap/pm/model'
+import { buildLineGrid } from '../components/editor/line-grid/build-line-grid'
+import { LINE_GRID_CONFIG } from '../components/editor/line-grid/constants'
+import { extractScreenplayBlocks } from '../components/editor/line-grid/extract-blocks'
+import type { MarkerLineRange } from '../components/editor/line-grid/types'
+import { useStructureStore, type StructureAct } from '../stores/structure'
 
-const LINES_PER_PAGE = 54
 const PADDING_ACTIONS = 25
 
-interface MarkerInfo {
-  type: 'newAct' | 'endOfAct' | 'sequence'
-  actId: string
-  seqId: string
-  pos: number
-  nodeSize: number
-}
-
-function scanMarkers(doc: PmNode): MarkerInfo[] {
-  const markers: MarkerInfo[] = []
-  doc.forEach((node, offset) => {
-    const t = node.type.name
-    if (t === 'newAct' || t === 'endOfAct' || t === 'sequence') {
-      markers.push({
-        type: t as MarkerInfo['type'],
-        actId: node.attrs.actId || '',
-        seqId: node.attrs.seqId || '',
-        pos: offset,
-        nodeSize: node.nodeSize,
-      })
-    }
-  })
-  return markers
+function scanMarkers(doc: PmNode): MarkerLineRange[] {
+  return buildLineGrid(extractScreenplayBlocks(doc), LINE_GRID_CONFIG).markers
 }
 
 function buildDocJson(acts: StructureAct[]) {
@@ -208,7 +190,7 @@ export function useStructureSync(editorRef: ShallowRef<Editor | undefined>) {
     isSyncing = false
   }
 
-  function syncLabels(editor: Editor, markers: MarkerInfo[]) {
+  function syncLabels(editor: Editor, markers: MarkerLineRange[]) {
     const doc = editor.state.doc
     let changed = false
     const tr = editor.state.tr

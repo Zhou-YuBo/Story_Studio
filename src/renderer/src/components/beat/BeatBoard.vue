@@ -1,54 +1,70 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useEditorBridge } from '../../stores/editor-bridge'
-import { DEFAULT_BEAT_LINES, useBeatStore } from '../../stores/beat'
-import { createDefaultEndPlacement, snapToBlockBoundary, useBeatTracking } from '../../composables/useBeatTracking'
+import { useLineGridStore } from '../../stores/line-grid'
+import { useBeatStore, type AddBeatBoundaryMode } from '../../stores/beat'
+import { useBeatTracking } from '../../composables/useBeatTracking'
 import { createBeatState } from './beat-state'
 
 const bridge = useEditorBridge()
+const lineGrid = useLineGridStore()
 const store = useBeatStore()
 const state = createBeatState()
+const ADD_BOUNDARY_HOT_ZONE_WIDTH = 32
 
 useBeatTracking(state)
 
+type HoverAddBoundaryTarget = {
+  seqId: string
+  gapIndex: number
+  y: number
+  mode: AddBeatBoundaryMode
+}
+
 const boardRef = ref<HTMLElement | null>(null)
+const hoverAddBoundary = ref<HoverAddBoundaryTarget | null>(null)
 let offsetResizeObserver: ResizeObserver | null = null
 let scrollHandler: (() => void) | null = null
 
 function updateContentOffsetY(): void {
   if (!boardRef.value || !bridge.scrollEl) return
-  const pageContainer = bridge.scrollEl.querySelector('.page-container') as HTMLElement | null
-  if (!pageContainer) return
+  const editorBody = bridge.scrollEl.querySelector('.editor-body') as HTMLElement | null
+  if (!editorBody) return
 
   const boardRect = boardRef.value.getBoundingClientRect()
-  const containerRect = pageContainer.getBoundingClientRect()
-  state.contentOffsetY = containerRect.top - boardRect.top
+  const editorRect = editorBody.getBoundingClientRect()
+  state.contentOffsetY = editorRect.top - boardRect.top + bridge.scrollEl.scrollTop
 }
 
 onMounted(() => {
   updateContentOffsetY()
   if (bridge.scrollEl) {
-    const pageContainer = bridge.scrollEl.querySelector('.page-container')
-    if (pageContainer) {
+    const editorBody = bridge.scrollEl.querySelector('.editor-body')
+    if (editorBody) {
       offsetResizeObserver = new ResizeObserver(updateContentOffsetY)
-      offsetResizeObserver.observe(pageContainer)
+      offsetResizeObserver.observe(editorBody)
     }
   }
 })
 
-watch(() => bridge.scrollEl, (el, oldEl) => {
-  if (oldEl && scrollHandler) {
-    oldEl.removeEventListener('scroll', scrollHandler)
-  }
-  if (el) {
-    scrollHandler = () => {
-      state.scrollTop = el.scrollTop
+watch(
+  () => bridge.scrollEl,
+  (el, oldEl) => {
+    if (oldEl && scrollHandler) {
+      oldEl.removeEventListener('scroll', scrollHandler)
     }
-    el.addEventListener('scroll', scrollHandler, { passive: true })
-    state.scrollTop = el.scrollTop
-    updateContentOffsetY()
-  }
-}, { immediate: true })
+    if (el) {
+      scrollHandler = () => {
+        state.scrollTop = el.scrollTop
+        hoverAddBoundary.value = null
+      }
+      el.addEventListener('scroll', scrollHandler, { passive: true })
+      state.scrollTop = el.scrollTop
+      updateContentOffsetY()
+    }
+  },
+  { immediate: true }
+)
 
 watch(() => bridge.editor, updateContentOffsetY)
 
@@ -65,30 +81,14 @@ const editingCardId = ref<string | null>(null)
 const editingContent = ref('')
 const dragBoundaryId = ref<string | null>(null)
 const dragPreviewY = ref(0)
-const dragPreviewPos = ref<number | null>(null)
-
-function defaultPlacementFromBoundary(boundaryId: string) {
-  const start = store.boundaryById(boundaryId)
-  if (!start) return { docPos: 0, virtual: true, anchorBoundaryId: boundaryId, lineOffset: DEFAULT_BEAT_LINES }
-
-  const editor = bridge.editor
-  if (!editor) {
-    return { docPos: start.docPos, virtual: true, anchorBoundaryId: boundaryId, lineOffset: DEFAULT_BEAT_LINES }
-  }
-
-  return createDefaultEndPlacement(editor, start.docPos, boundaryId, Boolean(start.virtual))
-}
+const dragPreviewLineIndex = ref<number | null>(null)
 
 function addBeat(cardId: string): void {
-  const card = store.cardById(cardId)
-  if (!card) return
-  store.insertBeatAfter(cardId, defaultPlacementFromBoundary(card.endBoundaryId))
+  store.insertBeatAfter(cardId)
 }
 
 function addScene(cardId: string): void {
-  const card = store.cardById(cardId)
-  if (!card) return
-  store.insertSceneAfter(cardId, defaultPlacementFromBoundary(card.endBoundaryId))
+  store.insertSceneAfter(cardId)
 }
 
 function removeCard(cardId: string): void {
@@ -106,14 +106,70 @@ function finishEdit(cardId: string): void {
   editingCardId.value = null
 }
 
+function clearHoverAddBoundary(): void {
+  hoverAddBoundary.value = null
+}
+
+function onBoardMouseMove(event: MouseEvent): void {
+  if (state.isDragging || !bridge.scrollEl || !boardRef.value) {
+    clearHoverAddBoundary()
+    return
+  }
+
+  const boardRect = boardRef.value.getBoundingClientRect()
+  if (event.clientX - boardRect.left > ADD_BOUNDARY_HOT_ZONE_WIDTH) {
+    clearHoverAddBoundary()
+    return
+  }
+
+  const editorBody = bridge.scrollEl.querySelector('.editor-body') as HTMLElement | null
+  if (!editorBody) {
+    clearHoverAddBoundary()
+    return
+  }
+
+  const editorRect = editorBody.getBoundingClientRect()
+  const gapIndex = lineGrid.yToGapIndex(event.clientY - editorRect.top)
+  const sequence = store.sequenceForGap(gapIndex)
+  if (!sequence) {
+    clearHoverAddBoundary()
+    return
+  }
+
+  const result = store.resolveAddBeatBoundaryAtLineGap(sequence.seqId, gapIndex)
+  if (!result.ok) {
+    clearHoverAddBoundary()
+    return
+  }
+
+  hoverAddBoundary.value = {
+    seqId: sequence.seqId,
+    gapIndex,
+    y: lineGrid.gapIndexToY(gapIndex) + state.contentOffsetY,
+    mode: result.mode,
+  }
+}
+
+function addBoundaryFromHover(event: MouseEvent): void {
+  event.preventDefault()
+  event.stopPropagation()
+
+  const target = hoverAddBoundary.value
+  if (!target) return
+
+  store.addBeatBoundaryAtLineGap(target.seqId, target.gapIndex)
+  clearHoverAddBoundary()
+}
+
 function onDragStart(boundaryId: string, y: number, event: MouseEvent): void {
-  const boundary = store.boundaryById(boundaryId)
+  const boundary = state.boundaries.find((item) => item.boundaryId === boundaryId)
   if (!boundary || boundary.locked) return
 
+  clearHoverAddBoundary()
   event.preventDefault()
   dragBoundaryId.value = boundaryId
   dragPreviewY.value = y
-  dragPreviewPos.value = boundary.docPos
+  dragPreviewLineIndex.value = boundary.lineIndex
   state.isDragging = true
 
   document.addEventListener('mousemove', onDragMove)
@@ -121,47 +177,41 @@ function onDragStart(boundaryId: string, y: number, event: MouseEvent): void {
 }
 
 function onDragMove(event: MouseEvent): void {
-  const editor = bridge.editor
-  if (!editor || !dragBoundaryId.value || !bridge.scrollEl) return
+  if (!dragBoundaryId.value || !bridge.scrollEl) return
 
-  const pageContainer = bridge.scrollEl.querySelector('.page-container') as HTMLElement | null
-  if (!pageContainer) return
+  const editorBody = bridge.scrollEl.querySelector('.editor-body') as HTMLElement | null
+  if (!editorBody) return
 
-  const containerRect = pageContainer.getBoundingClientRect()
-  const posInfo = editor.view.posAtCoords({
-    left: containerRect.left + containerRect.width / 2,
-    top: event.clientY,
-  })
-  if (!posInfo) return
+  const editorRect = editorBody.getBoundingClientRect()
+  const targetY = event.clientY - editorRect.top
+  const lineIndex = lineGrid.yToGapIndex(targetY)
+  if (!store.canMoveBoundaryToLine(dragBoundaryId.value, lineIndex)) return
 
-  const snapped = snapToBlockBoundary(editor.state.doc, posInfo.pos)
-  if (!store.canMoveBoundary(dragBoundaryId.value, snapped)) return
-
-  dragPreviewPos.value = snapped
-  try {
-    const coords = editor.view.coordsAtPos(snapped)
-    dragPreviewY.value = coords.top - containerRect.top + state.contentOffsetY
-  } catch {
-    dragPreviewY.value = event.clientY - containerRect.top + state.contentOffsetY
-  }
+  dragPreviewLineIndex.value = lineIndex
+  dragPreviewY.value = lineGrid.gapIndexToY(lineIndex) + state.contentOffsetY
 }
 
 function onDragEnd(): void {
   document.removeEventListener('mousemove', onDragMove)
   document.removeEventListener('mouseup', onDragEnd)
 
-  if (dragBoundaryId.value && dragPreviewPos.value !== null) {
-    store.moveBoundary(dragBoundaryId.value, dragPreviewPos.value)
+  if (dragBoundaryId.value && dragPreviewLineIndex.value !== null) {
+    store.moveBoundary(dragBoundaryId.value, dragPreviewLineIndex.value)
   }
 
   dragBoundaryId.value = null
-  dragPreviewPos.value = null
+  dragPreviewLineIndex.value = null
   state.isDragging = false
 }
 </script>
 
 <template>
-  <div class="beat-board" ref="boardRef">
+  <div
+    ref="boardRef"
+    class="beat-board"
+    @mousemove="onBoardMouseMove"
+    @mouseleave="clearHoverAddBoundary"
+  >
     <div
       class="beat-board-inner"
       :style="{
@@ -183,6 +233,22 @@ function onDragEnd(): void {
           class="drag-preview-line"
           :style="{ top: `${dragPreviewY}px` }"
         />
+      </div>
+
+      <div class="add-boundary-layer">
+        <template v-if="hoverAddBoundary">
+          <div class="add-boundary-preview-line" :style="{ top: `${hoverAddBoundary.y}px` }" />
+          <button
+            class="add-boundary-floating-btn"
+            :class="`is-${hoverAddBoundary.mode}`"
+            :style="{ top: `${hoverAddBoundary.y}px` }"
+            title="添加分界线"
+            @mousedown.prevent.stop
+            @click="addBoundaryFromHover"
+          >
+            +
+          </button>
+        </template>
       </div>
 
       <div class="card-layer">
@@ -250,6 +316,7 @@ function onDragEnd(): void {
 }
 
 .boundary-layer,
+.add-boundary-layer,
 .card-layer {
   position: absolute;
   inset: 0;
@@ -262,6 +329,42 @@ function onDragEnd(): void {
 
 .card-layer {
   z-index: 10;
+}
+
+.add-boundary-layer {
+  z-index: 25;
+  pointer-events: none;
+}
+
+.add-boundary-preview-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-top: 1px dashed rgba(255, 255, 255, 0.7);
+  pointer-events: none;
+}
+
+.add-boundary-floating-btn {
+  position: absolute;
+  left: 8px;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  transform: translateY(-50%);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  border-radius: 999px;
+  background: rgba(24, 24, 27, 0.9);
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 14px;
+  line-height: 18px;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.add-boundary-floating-btn:hover {
+  background: #27272a;
+  color: #ffffff;
+  border-color: #ffffff;
 }
 
 .boundary-line {

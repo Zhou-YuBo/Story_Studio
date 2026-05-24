@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { computed, ref } from 'vue'
 import { useWorldStore, type ObjectDetailState } from '../../stores/world'
 
 const props = defineProps<{
@@ -41,7 +41,6 @@ function updateContent(e: Event) {
   store.updateObjectDetail(props.detail.objectId, 'text', textarea.value)
 }
 
-import { computed } from 'vue'
 </script>
 
 <template>

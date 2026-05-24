@@ -2,17 +2,21 @@ import { reactive } from 'vue'
 
 export interface BoundaryLayout {
   boundaryId: string
+  seqId: string
+  lineIndex: number
   y: number
-  docPos: number
   locked: boolean
   visible: boolean
 }
 
 export interface CardLayout {
   cardId: string
+  seqId: string
   label: string
   content: string
   sceneStart: boolean
+  startLine: number
+  endLine: number
   topY: number
   bottomY: number
   height: number

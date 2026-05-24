@@ -1,10 +1,14 @@
 <script setup lang="ts">
+import { storeToRefs } from 'pinia'
 import { ref, watch, onBeforeUnmount, computed } from 'vue'
 import { useEditorBridge } from '../../stores/editor-bridge'
+import { useLineGridStore } from '../../stores/line-grid'
 import { useStructureStore } from '../../stores/structure'
 
 const bridge = useEditorBridge()
+const lineGrid = useLineGridStore()
 const store = useStructureStore()
+const { snapshot } = storeToRefs(lineGrid)
 
 const currentActId = ref('')
 const currentSeqId = ref('')
@@ -17,32 +21,24 @@ const currentSeq = computed(() =>
 )
 
 function updateCurrentPosition(): void {
-  const editor = bridge.editor
   const scrollEl = bridge.scrollEl
-  if (!editor || !scrollEl) return
+  if (!scrollEl) return
 
-  const rect = scrollEl.getBoundingClientRect()
-  const centerY = rect.top + rect.height / 2
-  const centerX = rect.left + rect.width / 2
-
-  const posInfo = editor.view.posAtCoords({ left: centerX, top: centerY })
-  if (!posInfo) return
-
-  const doc = editor.state.doc
+  const centerLine = lineGrid.yToLineIndex(scrollEl.scrollTop + scrollEl.clientHeight / 2)
   let foundActId = ''
   let foundSeqId = ''
 
-  doc.forEach((node, offset) => {
-    if (offset > posInfo.pos) return
-    const t = node.type.name
-    if (t === 'newAct') {
-      foundActId = node.attrs.actId || ''
+  for (const marker of snapshot.value.markers) {
+    if (marker.lineIndex > centerLine) break
+
+    if (marker.type === 'newAct') {
+      foundActId = marker.actId
       foundSeqId = ''
-    } else if (t === 'sequence') {
-      foundSeqId = node.attrs.seqId || ''
-      if (node.attrs.actId) foundActId = node.attrs.actId
+    } else if (marker.type === 'sequence') {
+      foundSeqId = marker.seqId
+      if (marker.actId) foundActId = marker.actId
     }
-  })
+  }
 
   currentActId.value = foundActId
   currentSeqId.value = foundSeqId
@@ -66,12 +62,9 @@ watch(
 )
 
 watch(
-  () => bridge.editor,
-  (editor) => {
-    if (editor) {
-      editor.on('update', updateCurrentPosition)
-      updateCurrentPosition()
-    }
+  snapshot,
+  () => {
+    updateCurrentPosition()
   },
   { immediate: true },
 )
@@ -80,7 +73,6 @@ onBeforeUnmount(() => {
   if (bridge.scrollEl && scrollHandler) {
     bridge.scrollEl.removeEventListener('scroll', scrollHandler)
   }
-  bridge.editor?.off('update', updateCurrentPosition)
 })
 </script>
 

@@ -1,25 +1,12 @@
 import { Extension } from '@tiptap/core'
 import { Plugin, PluginKey } from '@tiptap/pm/state'
 import { Decoration, DecorationSet } from '@tiptap/pm/view'
-import type { EditorView } from '@tiptap/pm/view'
 import type { Node as PmNode } from '@tiptap/pm/model'
-import type { Block } from '../pagination/types'
-import { paginate } from '../pagination/page-breaker'
+import { buildLineGrid } from '../line-grid/build-line-grid'
+import { LINE_GRID_CONFIG } from '../line-grid/constants'
+import { extractScreenplayBlocks } from '../line-grid/extract-blocks'
 
 const pluginKey = new PluginKey('paginationDecoration')
-
-function extractBlocks(doc: PmNode): Block[] {
-  const blocks: Block[] = []
-  doc.forEach((node, offset) => {
-    blocks.push({
-      type: node.type.name,
-      text: node.textContent,
-      pos: offset,
-      nodeSize: node.nodeSize,
-    })
-  })
-  return blocks
-}
 
 function createPageBreakWidget(pageNumber: number): HTMLElement {
   const el = document.createElement('div')
@@ -43,39 +30,28 @@ function createContdWidget(characterName: string): HTMLElement {
 }
 
 function buildDecorations(doc: PmNode): DecorationSet {
-  const blocks = extractBlocks(doc)
-  const result = paginate(blocks)
+  const snapshot = buildLineGrid(extractScreenplayBlocks(doc), LINE_GRID_CONFIG)
   const decorations: Decoration[] = []
 
-  for (let i = 0; i < result.pageBreaks.length; i++) {
-    const pb = result.pageBreaks[i]
-    const pageNumber = i + 2
+  for (let i = 0; i < snapshot.pageBreaks.length; i++) {
+    const pageBreak = snapshot.pageBreaks[i]
+    const block = snapshot.blocks[pageBreak.afterBlockIndex]
+    if (!block) continue
 
-    if (pb.moreContd) {
-      const block = blocks[pb.afterBlockIndex]
-      if (block) {
-        const breakPos = block.pos + block.nodeSize
-        decorations.push(
-          Decoration.widget(breakPos, () => createMoreWidget(), { side: 1 }),
-        )
-        decorations.push(
-          Decoration.widget(breakPos, () => createPageBreakWidget(pageNumber), { side: 1 }),
-        )
-        if (pb.moreContd.characterName) {
-          decorations.push(
-            Decoration.widget(breakPos, () => createContdWidget(pb.moreContd!.characterName), { side: 1 }),
-          )
-        }
-      }
-    } else {
-      const blockIndex = pb.afterBlockIndex
-      if (blockIndex >= 0 && blockIndex < blocks.length) {
-        const block = blocks[blockIndex]
-        const breakPos = block.pos + block.nodeSize
-        decorations.push(
-          Decoration.widget(breakPos, () => createPageBreakWidget(pageNumber), { side: 1 }),
-        )
-      }
+    const pageNumber = Math.floor(pageBreak.lineIndex / LINE_GRID_CONFIG.pageLines) + 1
+    const breakPos = block.pos + block.nodeSize
+
+    if (pageBreak.moreContd) {
+      decorations.push(Decoration.widget(breakPos, () => createMoreWidget(), { side: 1 }))
+    }
+
+    decorations.push(Decoration.widget(breakPos, () => createPageBreakWidget(pageNumber), { side: 1 }))
+
+    const characterName = pageBreak.moreContd?.characterName
+    if (characterName) {
+      decorations.push(
+        Decoration.widget(breakPos, () => createContdWidget(characterName), { side: 1 }),
+      )
     }
   }
 
@@ -86,8 +62,6 @@ export const PaginationDecoration = Extension.create({
   name: 'paginationDecoration',
 
   addProseMirrorPlugins() {
-    let debounceTimer: ReturnType<typeof setTimeout> | null = null
-
     return [
       new Plugin({
         key: pluginKey,

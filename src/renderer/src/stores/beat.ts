@@ -1,19 +1,11 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 
-export interface BeatBoundary {
-  id: string
-  docPos: number
-  locked?: boolean
-  virtual?: boolean
-  anchorBoundaryId?: string
-  lineOffset?: number
-}
-
 export interface BeatCard {
   id: string
-  startBoundaryId: string
-  endBoundaryId: string
+  seqId: string
+  startLine: number
+  endLine: number
   sceneStart: boolean
   content: string
 }
@@ -21,8 +13,9 @@ export interface BeatCard {
 export interface SequenceRange {
   actId: string
   seqId: string
-  startPos: number
-  endPos: number
+  startLine: number
+  contentStartLine: number
+  endLine: number
 }
 
 export interface BeatNumbering {
@@ -31,28 +24,32 @@ export interface BeatNumbering {
   label: string
 }
 
-export interface BoundaryPlacement {
-  docPos: number
-  virtual?: boolean
-  anchorBoundaryId?: string
-  lineOffset?: number
-}
+export type SplitBeatResult =
+  | { ok: true; cardId: string }
+  | { ok: false; reason: 'no-sequence' | 'no-card' | 'at-boundary' | 'too-small' }
 
-export interface DefaultBeatSeed {
-  start: BoundaryPlacement
-  end: BoundaryPlacement
-}
+export type AddBeatBoundaryMode = 'split' | 'append-tail'
+
+export type AddBeatBoundaryFailureReason =
+  | 'no-sequence'
+  | 'no-card'
+  | 'at-boundary'
+  | 'too-small'
+  | 'outside-sequence'
+
+export type AddBeatBoundaryResult =
+  | { ok: true; cardId: string; mode: AddBeatBoundaryMode }
+  | { ok: false; reason: AddBeatBoundaryFailureReason }
 
 interface StoredBeatState {
-  version: 2
-  boundaries: BeatBoundary[]
+  version: 1
   cards: BeatCard[]
 }
 
-interface BoundaryUsage {
-  previous?: BeatCard
-  next?: BeatCard
-}
+type BoundaryRef =
+  | { type: 'start'; cardId: string }
+  | { type: 'end'; cardId: string }
+  | { type: 'between'; previousCardId: string; nextCardId: string }
 
 export const DEFAULT_BEAT_CONTENT = '行为：\n反应：\n潜文本：'
 export const DEFAULT_BEAT_LINES = 8
@@ -60,65 +57,83 @@ export const LINE_HEIGHT = 16
 export const MIN_BEAT_LINES = 1
 export const MIN_BEAT_HEIGHT_PX = LINE_HEIGHT * MIN_BEAT_LINES
 
-const STORAGE_KEY = 'story-studio-beats-v2'
+const STORAGE_KEY = 'story-studio-beats-linegrid-v1'
 
-let nextBoundaryNum = 1
 let nextCardNum = 1
-
-function createBoundaryId(): string {
-  return `beat-boundary-${nextBoundaryNum++}`
-}
 
 function createCardId(): string {
   return `beat-card-${nextCardNum++}`
 }
 
+export function createStartBoundaryId(cardId: string): string {
+  return `beat-boundary:start:${cardId}`
+}
+
+export function createEndBoundaryId(cardId: string): string {
+  return `beat-boundary:end:${cardId}`
+}
+
+export function createBetweenBoundaryId(previousCardId: string, nextCardId: string): string {
+  return `beat-boundary:between:${previousCardId}:${nextCardId}`
+}
+
+function parseBoundaryId(boundaryId: string): BoundaryRef | null {
+  const parts = boundaryId.split(':')
+  if (parts[0] !== 'beat-boundary') return null
+  if (parts[1] === 'start' && parts[2]) return { type: 'start', cardId: parts[2] }
+  if (parts[1] === 'end' && parts[2]) return { type: 'end', cardId: parts[2] }
+  if (parts[1] === 'between' && parts[2] && parts[3]) {
+    return { type: 'between', previousCardId: parts[2], nextCardId: parts[3] }
+  }
+  return null
+}
+
+function isStoredCard(card: unknown): card is BeatCard {
+  if (!card || typeof card !== 'object') return false
+  const candidate = card as Partial<BeatCard>
+  return (
+    typeof candidate.id === 'string' &&
+    typeof candidate.seqId === 'string' &&
+    typeof candidate.startLine === 'number' &&
+    typeof candidate.endLine === 'number' &&
+    typeof candidate.sceneStart === 'boolean' &&
+    typeof candidate.content === 'string'
+  )
+}
+
 function loadFromStorage(): StoredBeatState {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return { version: 2, boundaries: [], cards: [] }
+    if (!raw) return { version: 1, cards: [] }
     const parsed = JSON.parse(raw) as Partial<StoredBeatState>
-    if (parsed.version !== 2 || !Array.isArray(parsed.boundaries) || !Array.isArray(parsed.cards)) {
-      return { version: 2, boundaries: [], cards: [] }
+    if (parsed.version !== 1 || !Array.isArray(parsed.cards)) {
+      return { version: 1, cards: [] }
     }
-    return { version: 2, boundaries: parsed.boundaries, cards: parsed.cards }
+    return { version: 1, cards: parsed.cards.filter(isStoredCard) }
   } catch {
-    return { version: 2, boundaries: [], cards: [] }
+    return { version: 1, cards: [] }
   }
 }
 
-function restoreIdCounters(boundaries: BeatBoundary[], cards: BeatCard[]): void {
-  for (const b of boundaries) {
-    const n = parseInt(b.id.replace('beat-boundary-', ''))
-    if (!isNaN(n)) nextBoundaryNum = Math.max(nextBoundaryNum, n + 1)
-  }
-  for (const c of cards) {
-    const n = parseInt(c.id.replace('beat-card-', ''))
+function restoreIdCounters(cards: BeatCard[]): void {
+  for (const card of cards) {
+    const n = parseInt(card.id.replace('beat-card-', ''))
     if (!isNaN(n)) nextCardNum = Math.max(nextCardNum, n + 1)
   }
 }
 
-function createBoundary(placement: BoundaryPlacement, locked = false): BeatBoundary {
-  const boundary: BeatBoundary = {
-    id: createBoundaryId(),
-    docPos: placement.docPos,
-    locked,
-  }
+function clampLine(line: number, min: number, max: number): number {
+  return Math.max(min, Math.min(line, max))
+}
 
-  if (placement.virtual && placement.anchorBoundaryId) {
-    boundary.virtual = true
-    boundary.anchorBoundaryId = placement.anchorBoundaryId
-    boundary.lineOffset = placement.lineOffset ?? DEFAULT_BEAT_LINES
-  }
-
-  return boundary
+function sequenceBodyStart(range: SequenceRange): number {
+  return range.contentStartLine + 1
 }
 
 export const useBeatStore = defineStore('beat', () => {
   const stored = loadFromStorage()
-  restoreIdCounters(stored.boundaries, stored.cards)
+  restoreIdCounters(stored.cards)
 
-  const boundaries = ref<BeatBoundary[]>(stored.boundaries)
   const cards = ref<BeatCard[]>(stored.cards)
   const sequenceRanges = ref<SequenceRange[]>([])
 
@@ -128,293 +143,431 @@ export const useBeatStore = defineStore('beat', () => {
     if (saveTimer) clearTimeout(saveTimer)
     saveTimer = setTimeout(() => {
       const state: StoredBeatState = {
-        version: 2,
-        boundaries: boundaries.value,
+        version: 1,
         cards: cards.value,
       }
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
     }, 500)
   }
 
-  function boundaryById(id: string): BeatBoundary | undefined {
-    return boundaries.value.find((b) => b.id === id)
-  }
-
   function cardById(id: string): BeatCard | undefined {
-    return cards.value.find((c) => c.id === id)
+    return cards.value.find((card) => card.id === id)
   }
 
-  function boundaryOrderValue(boundary: BeatBoundary, seen = new Set<string>()): number {
-    if (!boundary.virtual) return boundary.docPos
-    if (seen.has(boundary.id)) return boundary.docPos
-    seen.add(boundary.id)
-
-    const anchor = boundary.anchorBoundaryId ? boundaryById(boundary.anchorBoundaryId) : undefined
-    return (anchor ? boundaryOrderValue(anchor, seen) : boundary.docPos) + (boundary.lineOffset ?? DEFAULT_BEAT_LINES)
+  function sequenceById(seqId: string): SequenceRange | undefined {
+    return sequenceRanges.value.find((range) => range.seqId === seqId)
   }
 
-  function resolvedBoundaryDocPos(boundary: BeatBoundary, seen = new Set<string>()): number {
-    if (!boundary.virtual) return boundary.docPos
-    if (seen.has(boundary.id)) return boundary.docPos
-    seen.add(boundary.id)
-
-    const anchor = boundary.anchorBoundaryId ? boundaryById(boundary.anchorBoundaryId) : undefined
-    return anchor ? resolvedBoundaryDocPos(anchor, seen) : boundary.docPos
+  function cardsForSequence(seqId: string): BeatCard[] {
+    return cards.value
+      .filter((card) => card.seqId === seqId)
+      .sort((a, b) => a.startLine - b.startLine || a.endLine - b.endLine)
   }
 
-  function fallbackSortedCards(): BeatCard[] {
-    return [...cards.value].sort((a, b) => {
-      const aStart = boundaryById(a.startBoundaryId)
-      const bStart = boundaryById(b.startBoundaryId)
-      return (aStart ? boundaryOrderValue(aStart) : 0) - (bStart ? boundaryOrderValue(bStart) : 0)
+  function sequenceForLine(lineIndex: number): SequenceRange | undefined {
+    return sequenceRanges.value.find(
+      (range) => range.startLine <= lineIndex && lineIndex < range.endLine,
+    )
+  }
+
+  function sequenceForGap(gapIndex: number): SequenceRange | undefined {
+    return sequenceRanges.value.find(
+      (range) => sequenceBodyStart(range) <= gapIndex && gapIndex <= range.endLine,
+    )
+  }
+
+  function normalizeSequence(seqId: string): void {
+    const range = sequenceById(seqId)
+    if (!range) {
+      cards.value = cards.value.filter((card) => card.seqId !== seqId)
+      return
+    }
+
+    const sorted = cardsForSequence(seqId)
+    if (sorted.length === 0) return
+
+    const normalized: BeatCard[] = []
+    const firstStartMin = sequenceBodyStart(range)
+    let cursor = firstStartMin
+
+    for (let i = 0; i < sorted.length; i += 1) {
+      const card = sorted[i]
+      const clampedStart = clampLine(card.startLine, firstStartMin, range.endLine - MIN_BEAT_LINES)
+      const start = i === 0 ? clampedStart : Math.max(clampedStart, cursor)
+      const end = Math.min(Math.max(card.endLine, start + MIN_BEAT_LINES), range.endLine)
+      if (end - start < MIN_BEAT_LINES) break
+
+      card.startLine = start
+      card.endLine = end
+      normalized.push(card)
+      cursor = end
+    }
+
+    const normalizedIds = new Set(normalized.map((card) => card.id))
+    cards.value = cards.value.filter((card) => card.seqId !== seqId || normalizedIds.has(card.id))
+  }
+
+  function normalizeAllSequences(): void {
+    const validSeqIds = new Set(sequenceRanges.value.map((range) => range.seqId))
+    cards.value = cards.value.filter((card) => validSeqIds.has(card.seqId))
+    for (const range of sequenceRanges.value) {
+      normalizeSequence(range.seqId)
+    }
+    cards.value = [...cards.value].sort((a, b) => {
+      const aSeq = sequenceById(a.seqId)?.startLine ?? 0
+      const bSeq = sequenceById(b.seqId)?.startLine ?? 0
+      return aSeq - bSeq || a.startLine - b.startLine
     })
   }
 
-  function orderedCards(): BeatCard[] {
-    const sorted = fallbackSortedCards()
-    if (sorted.length <= 1) return sorted
-
-    const byStart = new Map<string, BeatCard[]>()
-    const endBoundaryIds = new Set<string>()
-
-    for (const card of sorted) {
-      const list = byStart.get(card.startBoundaryId) ?? []
-      list.push(card)
-      byStart.set(card.startBoundaryId, list)
-      endBoundaryIds.add(card.endBoundaryId)
-    }
-
-    const candidates = sorted.filter((card) => !endBoundaryIds.has(card.startBoundaryId))
-    const lockedStart = candidates.find((card) => Boolean(boundaryById(card.startBoundaryId)?.locked))
-    let current = lockedStart ?? candidates[0] ?? sorted[0]
-    const ordered: BeatCard[] = []
-    const visited = new Set<string>()
-
-    while (current && !visited.has(current.id)) {
-      ordered.push(current)
-      visited.add(current.id)
-
-      const next = byStart.get(current.endBoundaryId)?.find((card) => !visited.has(card.id))
-      if (!next) break
-      current = next
-    }
-
-    for (const card of sorted) {
-      if (!visited.has(card.id)) ordered.push(card)
-    }
-
-    return ordered
+  function rangesEqual(a: SequenceRange[], b: SequenceRange[]): boolean {
+    if (a.length !== b.length) return false
+    return a.every((range, index) => {
+      const other = b[index]
+      return (
+        other &&
+        range.actId === other.actId &&
+        range.seqId === other.seqId &&
+        range.startLine === other.startLine &&
+        range.contentStartLine === other.contentStartLine &&
+        range.endLine === other.endLine
+      )
+    })
   }
 
-  function findSuccessor(card: BeatCard): BeatCard | undefined {
-    return orderedCards().find((candidate) => candidate.id !== card.id && candidate.startBoundaryId === card.endBoundaryId)
-  }
+  function setSequenceRanges(
+    ranges: SequenceRange[],
+    options: { normalize?: boolean } = {},
+  ): void {
+    const previousRanges = sequenceRanges.value
+    const sorted = [...ranges].sort((a, b) => a.startLine - b.startLine)
+    if (rangesEqual(previousRanges, sorted)) return
 
-  function findPredecessor(card: BeatCard): BeatCard | undefined {
-    return orderedCards().find((candidate) => candidate.id !== card.id && candidate.endBoundaryId === card.startBoundaryId)
-  }
+    const previous = new Map(previousRanges.map((range) => [range.seqId, range]))
+    sequenceRanges.value = sorted
 
-  function findBoundaryUsage(boundaryId: string): BoundaryUsage {
-    const ordered = orderedCards()
-    return {
-      previous: ordered.find((card) => card.endBoundaryId === boundaryId),
-      next: ordered.find((card) => card.startBoundaryId === boundaryId),
-    }
-  }
-
-  function sortCards(): void {
-    cards.value = orderedCards()
-  }
-
-  function setSequenceRanges(ranges: SequenceRange[]): void {
-    sequenceRanges.value = [...ranges].sort((a, b) => a.startPos - b.startPos)
-  }
-
-  function ensureDefaultBeat(seed: DefaultBeatSeed): void {
-    if (cards.value.length > 0) return
-
-    const startBoundary = createBoundary(seed.start, true)
-    const endPlacement: BoundaryPlacement = seed.end.virtual
-      ? {
-          ...seed.end,
-          anchorBoundaryId: seed.end.anchorBoundaryId ?? startBoundary.id,
-          lineOffset: seed.end.lineOffset ?? DEFAULT_BEAT_LINES,
-        }
-      : seed.end
-    const endBoundary = createBoundary(endPlacement)
-    const card: BeatCard = {
-      id: createCardId(),
-      startBoundaryId: startBoundary.id,
-      endBoundaryId: endBoundary.id,
-      sceneStart: false,
-      content: DEFAULT_BEAT_CONTENT,
-    }
-
-    boundaries.value = [startBoundary, endBoundary]
-    cards.value = [card]
-    save()
-  }
-
-  function normalizeGraph(): void {
-    const boundaryIds = new Set(boundaries.value.map((boundary) => boundary.id))
-    const validCards = fallbackSortedCards().filter((card) => (
-      card.startBoundaryId !== card.endBoundaryId
-      && boundaryIds.has(card.startBoundaryId)
-      && boundaryIds.has(card.endBoundaryId)
-    ))
-
-    cards.value = validCards
-
-    for (const boundary of boundaries.value) {
-      if (!boundary.virtual || boundary.anchorBoundaryId) continue
-
-      const owningCard = cards.value.find((card) => card.endBoundaryId === boundary.id)
-      const followingCard = cards.value.find((card) => card.startBoundaryId === boundary.id)
-      const anchorId = owningCard?.startBoundaryId ?? followingCard?.startBoundaryId
-
-      if (anchorId && anchorId !== boundary.id && boundaryIds.has(anchorId)) {
-        boundary.anchorBoundaryId = anchorId
-        boundary.lineOffset = boundary.lineOffset ?? DEFAULT_BEAT_LINES
-      } else {
-        boundary.virtual = false
-        boundary.anchorBoundaryId = undefined
-        boundary.lineOffset = undefined
-      }
-    }
-
-    const ordered = orderedCards()
-    for (let i = 1; i < ordered.length; i += 1) {
-      const previous = ordered[i - 1]
-      const current = ordered[i]
-      if (current.startBoundaryId !== previous.endBoundaryId) {
-        current.startBoundaryId = previous.endBoundaryId
-      }
-    }
-
-    cards.value = ordered.filter((card) => card.startBoundaryId !== card.endBoundaryId)
-
-    const usedBoundaryIds = new Set<string>()
     for (const card of cards.value) {
-      usedBoundaryIds.add(card.startBoundaryId)
-      usedBoundaryIds.add(card.endBoundaryId)
+      const oldRange = previous.get(card.seqId)
+      const newRange = sequenceById(card.seqId)
+      if (!oldRange || !newRange) continue
+      const deltaStart = newRange.startLine - oldRange.startLine
+      if (deltaStart === 0) continue
+      card.startLine += deltaStart
+      card.endLine += deltaStart
     }
-    boundaries.value = boundaries.value.filter((boundary) => usedBoundaryIds.has(boundary.id))
-    sortCards()
+
+    const validSeqIds = new Set(sequenceRanges.value.map((range) => range.seqId))
+    cards.value = cards.value.filter((card) => validSeqIds.has(card.seqId))
+
+    if (options.normalize !== false) normalizeAllSequences()
     save()
   }
 
-  function insertCardAfter(cardId: string, placement: BoundaryPlacement, sceneStart: boolean): string | null {
+  function ensureDefaultBeatsForSequences(): void {
+    let changed = false
+
+    for (const sequence of sequenceRanges.value) {
+      if (cards.value.some((card) => card.seqId === sequence.seqId)) continue
+
+      const startLine = sequenceBodyStart(sequence)
+      const endLine = Math.min(startLine + DEFAULT_BEAT_LINES, sequence.endLine)
+      if (endLine - startLine < MIN_BEAT_LINES) continue
+
+      cards.value.push({
+        id: createCardId(),
+        seqId: sequence.seqId,
+        startLine,
+        endLine,
+        sceneStart: false,
+        content: DEFAULT_BEAT_CONTENT,
+      })
+      changed = true
+    }
+
+    if (changed) {
+      normalizeAllSequences()
+      save()
+    }
+  }
+
+  function ensureDefaultBeatForFirstSequence(): void {
+    ensureDefaultBeatsForSequences()
+  }
+
+  function insertCardAfter(cardId: string, sceneStart: boolean): string | null {
     const current = cardById(cardId)
     if (!current) return null
+    const range = sequenceById(current.seqId)
+    if (!range) return null
 
-    const startBoundaryId = current.endBoundaryId
-    const successor = findSuccessor(current)
-    const endBoundary = createBoundary({
-      ...placement,
-      anchorBoundaryId: placement.virtual ? (placement.anchorBoundaryId ?? startBoundaryId) : placement.anchorBoundaryId,
-      lineOffset: placement.virtual ? (placement.lineOffset ?? DEFAULT_BEAT_LINES) : placement.lineOffset,
-    })
+    const sequenceCards = cardsForSequence(current.seqId)
+    const currentIndex = sequenceCards.findIndex((card) => card.id === cardId)
+    if (currentIndex === -1) return null
+
+    const next = sequenceCards[currentIndex + 1]
+    if (next) {
+      const splitLine = Math.floor((current.startLine + current.endLine) / 2)
+      const result = splitBeatAtLineGap(current.seqId, splitLine, sceneStart)
+      return result.ok ? result.cardId : null
+    }
+
+    const startLine = current.endLine
+    const maxHeight = range.endLine - startLine
+    if (maxHeight < MIN_BEAT_LINES) return null
+
+    const height = Math.min(DEFAULT_BEAT_LINES, maxHeight)
     const newCard: BeatCard = {
       id: createCardId(),
-      startBoundaryId,
-      endBoundaryId: endBoundary.id,
+      seqId: current.seqId,
+      startLine,
+      endLine: startLine + height,
       sceneStart,
       content: DEFAULT_BEAT_CONTENT,
     }
 
-    if (successor) {
-      successor.startBoundaryId = endBoundary.id
-    }
-
-    boundaries.value.push(endBoundary)
     cards.value.push(newCard)
-    sortCards()
+    normalizeSequence(current.seqId)
     save()
     return newCard.id
   }
 
-  function insertBeatAfter(cardId: string, placement: BoundaryPlacement): string | null {
-    return insertCardAfter(cardId, placement, false)
+  function insertBeatAfter(cardId: string): string | null {
+    return insertCardAfter(cardId, false)
   }
 
-  function insertSceneAfter(cardId: string, placement: BoundaryPlacement): string | null {
-    return insertCardAfter(cardId, placement, true)
+  function insertSceneAfter(cardId: string): string | null {
+    return insertCardAfter(cardId, true)
   }
 
-  function splitCardAtBoundary(pos: number): string | null {
-    const target = orderedCards().find((card) => {
-      const start = boundaryById(card.startBoundaryId)
-      const end = boundaryById(card.endBoundaryId)
-      if (!start || !end) return false
-      const startPos = resolvedBoundaryDocPos(start)
-      const endPos = resolvedBoundaryDocPos(end)
-      return startPos < pos && pos < endPos
-    })
-    if (!target) return null
+  function removeCard(cardId: string): void {
+    if (cards.value.length <= 1) return
+    const card = cardById(cardId)
+    if (!card) return
 
-    const splitBoundary = createBoundary({ docPos: pos })
+    const height = card.endLine - card.startLine
+    const sequenceCards = cardsForSequence(card.seqId)
+    const removedIndex = sequenceCards.findIndex((candidate) => candidate.id === cardId)
+    const successor = sequenceCards[removedIndex + 1]
+
+    if (card.sceneStart && successor) {
+      successor.sceneStart = true
+    }
+
+    cards.value = cards.value.filter((candidate) => candidate.id !== cardId)
+
+    for (const candidate of cards.value) {
+      if (candidate.seqId === card.seqId && candidate.startLine >= card.endLine) {
+        candidate.startLine -= height
+        candidate.endLine -= height
+      }
+    }
+
+    normalizeSequence(card.seqId)
+    save()
+  }
+
+  function canMoveBoundaryToLine(boundaryId: string, lineIndex: number): boolean {
+    const boundary = parseBoundaryId(boundaryId)
+    if (!boundary) return false
+
+    if (boundary.type === 'start') {
+      const card = cardById(boundary.cardId)
+      const range = card ? sequenceById(card.seqId) : undefined
+      if (!card || !range) return false
+      return lineIndex >= sequenceBodyStart(range) && lineIndex <= card.endLine - MIN_BEAT_LINES
+    }
+
+    if (boundary.type === 'end') {
+      const card = cardById(boundary.cardId)
+      const range = card ? sequenceById(card.seqId) : undefined
+      if (!card || !range) return false
+      return lineIndex >= card.startLine + MIN_BEAT_LINES && lineIndex <= range.endLine
+    }
+
+    const previous = cardById(boundary.previousCardId)
+    const next = cardById(boundary.nextCardId)
+    if (!previous || !next || previous.seqId !== next.seqId) return false
+    return (
+      lineIndex >= previous.startLine + MIN_BEAT_LINES &&
+      lineIndex <= next.endLine - MIN_BEAT_LINES
+    )
+  }
+
+  function moveBoundary(boundaryId: string, lineIndex: number): void {
+    if (!canMoveBoundaryToLine(boundaryId, lineIndex)) return
+    const boundary = parseBoundaryId(boundaryId)
+    if (!boundary) return
+
+    if (boundary.type === 'start') {
+      const card = cardById(boundary.cardId)
+      if (!card) return
+      card.startLine = lineIndex
+      normalizeSequence(card.seqId)
+      save()
+      return
+    }
+
+    if (boundary.type === 'end') {
+      const card = cardById(boundary.cardId)
+      if (!card) return
+      card.endLine = lineIndex
+      normalizeSequence(card.seqId)
+      save()
+      return
+    }
+
+    const previous = cardById(boundary.previousCardId)
+    const next = cardById(boundary.nextCardId)
+    if (!previous || !next || previous.seqId !== next.seqId) return
+    previous.endLine = lineIndex
+    next.startLine = lineIndex
+    normalizeSequence(previous.seqId)
+    save()
+  }
+
+  function splitBeatAtLineGap(
+    seqId: string,
+    gapIndex: number,
+    sceneStart = false,
+  ): SplitBeatResult {
+    if (!sequenceById(seqId)) return { ok: false, reason: 'no-sequence' }
+
+    const sequenceCards = cardsForSequence(seqId)
+    const boundaryCard = sequenceCards.find(
+      (card) => gapIndex === card.startLine || gapIndex === card.endLine,
+    )
+    if (boundaryCard) return { ok: false, reason: 'at-boundary' }
+
+    const target = sequenceCards.find(
+      (card) => card.startLine < gapIndex && gapIndex < card.endLine,
+    )
+    if (!target) return { ok: false, reason: 'no-card' }
+
+    if (
+      gapIndex - target.startLine < MIN_BEAT_LINES ||
+      target.endLine - gapIndex < MIN_BEAT_LINES
+    ) {
+      return { ok: false, reason: 'too-small' }
+    }
+
     const newCard: BeatCard = {
       id: createCardId(),
-      startBoundaryId: splitBoundary.id,
-      endBoundaryId: target.endBoundaryId,
-      sceneStart: false,
+      seqId,
+      startLine: gapIndex,
+      endLine: target.endLine,
+      sceneStart,
       content: DEFAULT_BEAT_CONTENT,
     }
 
-    target.endBoundaryId = splitBoundary.id
-    boundaries.value.push(splitBoundary)
+    target.endLine = gapIndex
     cards.value.push(newCard)
-    sortCards()
+    normalizeSequence(seqId)
     save()
-    return newCard.id
+    return { ok: true, cardId: newCard.id }
   }
 
-  function canMoveBoundary(boundaryId: string, newDocPos: number): boolean {
-    const boundary = boundaryById(boundaryId)
-    if (!boundary || boundary.locked) return false
-
-    const usage = findBoundaryUsage(boundaryId)
-    if (!usage.previous && !usage.next) return false
-
-    if (usage.previous) {
-      const lowerBoundary = boundaryById(usage.previous.startBoundaryId)
-      if (lowerBoundary && !(lowerBoundary.virtual && lowerBoundary.anchorBoundaryId === boundaryId)) {
-        if (newDocPos <= resolvedBoundaryDocPos(lowerBoundary)) return false
-      }
-    }
-
-    if (usage.next) {
-      const upperBoundary = boundaryById(usage.next.endBoundaryId)
-      if (upperBoundary && !(upperBoundary.virtual && upperBoundary.anchorBoundaryId === boundaryId)) {
-        if (newDocPos >= resolvedBoundaryDocPos(upperBoundary)) return false
-      }
-    }
-
-    return true
+  function splitCardAtLine(seqId: string, lineIndex: number, sceneStart = false): string | null {
+    const result = splitBeatAtLineGap(seqId, lineIndex, sceneStart)
+    return result.ok ? result.cardId : null
   }
 
-  function moveBoundary(boundaryId: string, newDocPos: number): void {
-    if (!canMoveBoundary(boundaryId, newDocPos)) return
-    const boundary = boundaryById(boundaryId)
-    if (!boundary) return
+  function resolveAddBeatBoundaryAtLineGap(
+    seqId: string,
+    gapIndex: number,
+  ): AddBeatBoundaryResult {
+    const range = sequenceById(seqId)
+    if (!range) return { ok: false, reason: 'no-sequence' }
+    if (gapIndex < sequenceBodyStart(range) || gapIndex > range.endLine) {
+      return { ok: false, reason: 'outside-sequence' }
+    }
 
-    boundary.docPos = newDocPos
-    boundary.virtual = false
-    boundary.anchorBoundaryId = undefined
-    boundary.lineOffset = undefined
+    const sequenceCards = cardsForSequence(seqId)
+    if (sequenceCards.length === 0) return { ok: false, reason: 'no-card' }
+
+    const boundaryCard = sequenceCards.find(
+      (card) => gapIndex === card.startLine || gapIndex === card.endLine,
+    )
+    if (boundaryCard) return { ok: false, reason: 'at-boundary' }
+
+    const target = sequenceCards.find(
+      (card) => card.startLine < gapIndex && gapIndex < card.endLine,
+    )
+    if (target) {
+      if (
+        gapIndex - target.startLine < MIN_BEAT_LINES ||
+        target.endLine - gapIndex < MIN_BEAT_LINES
+      ) {
+        return { ok: false, reason: 'too-small' }
+      }
+      return { ok: true, cardId: target.id, mode: 'split' }
+    }
+
+    const lastCard = sequenceCards[sequenceCards.length - 1]
+    if (lastCard.endLine < gapIndex && gapIndex <= range.endLine) {
+      if (gapIndex - lastCard.endLine < MIN_BEAT_LINES) {
+        return { ok: false, reason: 'too-small' }
+      }
+      return { ok: true, cardId: lastCard.id, mode: 'append-tail' }
+    }
+
+    return { ok: false, reason: 'no-card' }
+  }
+
+  function addBeatBoundaryAtLineGap(
+    seqId: string,
+    gapIndex: number,
+    sceneStart = false,
+  ): AddBeatBoundaryResult {
+    const resolved = resolveAddBeatBoundaryAtLineGap(seqId, gapIndex)
+    if (!resolved.ok) return resolved
+
+    if (resolved.mode === 'split') {
+      const result = splitBeatAtLineGap(seqId, gapIndex, sceneStart)
+      return result.ok
+        ? { ok: true, cardId: result.cardId, mode: 'split' }
+        : { ok: false, reason: result.reason }
+    }
+
+    const lastCard = cardById(resolved.cardId)
+    if (!lastCard) return { ok: false, reason: 'no-card' }
+
+    const newCard: BeatCard = {
+      id: createCardId(),
+      seqId,
+      startLine: lastCard.endLine,
+      endLine: gapIndex,
+      sceneStart,
+      content: DEFAULT_BEAT_CONTENT,
+    }
+
+    cards.value.push(newCard)
+    normalizeSequence(seqId)
     save()
+    return { ok: true, cardId: newCard.id, mode: 'append-tail' }
   }
 
-  function batchMoveBoundaries(updates: Map<string, number>): void {
-    let changed = false
-    for (const [id, pos] of updates) {
-      const boundary = boundaryById(id)
-      if (boundary && !boundary.virtual && boundary.docPos !== pos) {
-        boundary.docPos = pos
-        changed = true
+  function applyLineDelta(seqId: string, editLine: number, deltaLines: number): void {
+    if (deltaLines === 0) return
+    const sequenceCards = cardsForSequence(seqId)
+    const target = sequenceCards.find(
+      (card) => card.startLine <= editLine && editLine < card.endLine,
+    )
+    if (!target) return
+
+    const oldEndLine = target.endLine
+    target.endLine = Math.max(target.startLine + MIN_BEAT_LINES, target.endLine + deltaLines)
+    const actualDelta = target.endLine - oldEndLine
+    if (actualDelta === 0) return
+
+    for (const card of sequenceCards) {
+      if (card.startLine >= oldEndLine && card.id !== target.id) {
+        card.startLine += actualDelta
+        card.endLine += actualDelta
       }
     }
-    if (changed) normalizeGraph()
+
+    normalizeSequence(seqId)
+    save()
   }
 
   function updateCardContent(cardId: string, content: string): void {
@@ -424,80 +577,56 @@ export const useBeatStore = defineStore('beat', () => {
     save()
   }
 
-  function removeCard(cardId: string): void {
-    if (cards.value.length <= 1) return
-    const card = cardById(cardId)
-    if (!card) return
-
-    const predecessor = findPredecessor(card)
-    const successor = findSuccessor(card)
-
-    if (card.sceneStart && successor) {
-      successor.sceneStart = true
-    }
-
-    if (predecessor) {
-      predecessor.endBoundaryId = card.endBoundaryId
-    } else if (successor) {
-      successor.startBoundaryId = card.startBoundaryId
-    }
-
-    cards.value = cards.value.filter((c) => c.id !== cardId)
-    normalizeGraph()
-  }
-
-  function sequenceForPos(pos: number): SequenceRange | undefined {
-    return sequenceRanges.value.find((range) => range.startPos <= pos && pos < range.endPos)
-  }
-
   const numbering = computed<Map<string, BeatNumbering>>(() => {
     const result = new Map<string, BeatNumbering>()
-    const counters = new Map<string, { sceneNum: number; beatNum: number; hasCard: boolean }>()
 
-    for (const card of orderedCards()) {
-      const start = boundaryById(card.startBoundaryId)
-      if (!start) continue
+    for (const range of sequenceRanges.value) {
+      let sceneNum = 0
+      let beatNum = 0
+      let hasCard = false
 
-      const seq = sequenceForPos(resolvedBoundaryDocPos(start))
-      const seqKey = seq ? `${seq.actId}:${seq.seqId}:${seq.startPos}` : 'fallback'
-      const counter = counters.get(seqKey) ?? { sceneNum: 0, beatNum: 0, hasCard: false }
+      for (const card of cardsForSequence(range.seqId)) {
+        if (!hasCard || card.sceneStart) {
+          sceneNum += 1
+          beatNum = 1
+          hasCard = true
+        } else {
+          beatNum += 1
+        }
 
-      if (!counter.hasCard || card.sceneStart) {
-        counter.sceneNum += 1
-        counter.beatNum = 1
-        counter.hasCard = true
-      } else {
-        counter.beatNum += 1
+        result.set(card.id, {
+          sceneNum,
+          beatNum,
+          label: `S${sceneNum}#${beatNum}`,
+        })
       }
-
-      result.set(card.id, {
-        sceneNum: counter.sceneNum,
-        beatNum: counter.beatNum,
-        label: `S${counter.sceneNum}#${counter.beatNum}`,
-      })
-      counters.set(seqKey, counter)
     }
 
     return result
   })
 
   return {
-    boundaries,
     cards,
     sequenceRanges,
     numbering,
-    boundaryById,
     cardById,
+    cardsForSequence,
+    sequenceById,
+    sequenceForLine,
+    sequenceForGap,
     setSequenceRanges,
-    ensureDefaultBeat,
-    normalizeGraph,
+    ensureDefaultBeatsForSequences,
+    ensureDefaultBeatForFirstSequence,
     insertBeatAfter,
     insertSceneAfter,
-    splitCardAtBoundary,
-    canMoveBoundary,
-    moveBoundary,
-    batchMoveBoundaries,
-    updateCardContent,
     removeCard,
+    canMoveBoundaryToLine,
+    moveBoundary,
+    splitBeatAtLineGap,
+    splitCardAtLine,
+    resolveAddBeatBoundaryAtLineGap,
+    addBeatBoundaryAtLineGap,
+    applyLineDelta,
+    updateCardContent,
   }
 })

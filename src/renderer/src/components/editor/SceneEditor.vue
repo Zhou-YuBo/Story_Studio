@@ -3,6 +3,7 @@ import { useEditor, EditorContent } from '@tiptap/vue-3'
 import StarterKit from '@tiptap/starter-kit'
 import { ref, onBeforeUnmount, onMounted, watchEffect, nextTick } from 'vue'
 import { useEditorBridge } from '../../stores/editor-bridge'
+import { useLineGridStore } from '../../stores/line-grid'
 import { useStructureSync } from '../../composables/useStructureSync'
 import { General } from './extensions/general'
 import { SceneHeading } from './extensions/scene-heading'
@@ -27,6 +28,7 @@ import SmartTypeDropdown from './SmartTypeDropdown.vue'
 
 const smartTypeState = createSmartTypeState()
 const editorBridge = useEditorBridge()
+const lineGridStore = useLineGridStore()
 const scrollRef = ref<HTMLElement | null>(null)
 
 const STORAGE_KEY = 'story-studio-scene-doc'
@@ -96,7 +98,9 @@ let saveTimer: ReturnType<typeof setTimeout> | null = null
 
 watchEffect(() => {
   if (!editor.value) return
+  lineGridStore.rebuild(editor.value.state.doc)
   editor.value.on('update', ({ editor: e }) => {
+    lineGridStore.rebuild(e.state.doc)
     if (saveTimer) clearTimeout(saveTimer)
     saveTimer = setTimeout(() => {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(e.getJSON()))
@@ -106,6 +110,7 @@ watchEffect(() => {
 
 onBeforeUnmount(() => {
   if (saveTimer) clearTimeout(saveTimer)
+  lineGridStore.reset()
   editorBridge.unregister()
   editor.value?.destroy()
 })
