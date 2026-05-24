@@ -13,7 +13,6 @@ import type {
 function marginTopLines(block: ScreenplayBlock, line: number, config: LineGridConfig): number {
   const elementConfig = elementLayoutConfig(block.type, config)
   if (line === 0 && elementConfig.isFirstNoMargin) return 0
-  if (line % config.pageLines === 0) return 0
   return elementConfig.marginTopLines
 }
 

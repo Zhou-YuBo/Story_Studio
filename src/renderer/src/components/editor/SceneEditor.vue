@@ -285,35 +285,6 @@ function onPickerKeydown(e: KeyboardEvent) {
 </template>
 
 <style scoped>
-@font-face {
-  font-family: 'Courier Prime';
-  src: url('@/assets/fonts/CourierPrime-Regular.ttf') format('truetype');
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-@font-face {
-  font-family: 'Courier Prime';
-  src: url('@/assets/fonts/CourierPrime-Bold.ttf') format('truetype');
-  font-weight: 700;
-  font-style: normal;
-  font-display: swap;
-}
-@font-face {
-  font-family: 'Courier Prime';
-  src: url('@/assets/fonts/CourierPrime-Italic.ttf') format('truetype');
-  font-weight: 400;
-  font-style: italic;
-  font-display: swap;
-}
-@font-face {
-  font-family: 'Courier Prime';
-  src: url('@/assets/fonts/CourierPrime-BoldItalic.ttf') format('truetype');
-  font-weight: 700;
-  font-style: italic;
-  font-display: swap;
-}
-
 .scene-editor {
   display: flex;
   flex-direction: column;
@@ -514,8 +485,8 @@ function onPickerKeydown(e: KeyboardEvent) {
 /* 分页标记 */
 .page-container :deep(.page-break-line) {
   height: 0;
-  border-top: 1px dashed #ccc;
-  margin: 24px -1in 24px -1.5in;
+  border-top: 0;
+  margin: 0 -1in 0 -1.5in;
   position: relative;
 }
 .page-container :deep(.page-break-line)::after {

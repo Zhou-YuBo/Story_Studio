@@ -30,12 +30,16 @@ export function scanSequenceRanges(doc: PmNode, snapshot?: LineGridSnapshot): Se
   return markers.map((marker, index) => {
     const block = lineGridSnapshot.blocks.find((range) => range.blockIndex === marker.blockIndex)
     const next = markers[index + 1]
+    const nextBlock = next
+      ? lineGridSnapshot.blocks.find((range) => range.blockIndex === next.blockIndex)
+      : undefined
+
     return {
       actId: marker.actId,
       seqId: marker.seqId || `seq-${marker.pos}`,
       startLine: block?.startLine ?? marker.lineIndex,
       contentStartLine: block?.contentStartLine ?? marker.lineIndex,
-      endLine: next?.lineIndex ?? lineGridSnapshot.totalLines,
+      endLine: nextBlock?.startLine ?? next?.lineIndex ?? lineGridSnapshot.totalLines,
     }
   })
 }
