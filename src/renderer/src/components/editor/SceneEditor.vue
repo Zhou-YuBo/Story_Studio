@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { useEditor, EditorContent, type Editor } from '@tiptap/vue-3'
 import StarterKit from '@tiptap/starter-kit'
-import { ref, onBeforeUnmount, onMounted, watchEffect, nextTick } from 'vue'
+import { storeToRefs } from 'pinia'
+import { ref, onBeforeUnmount, onMounted, watchEffect, nextTick, computed } from 'vue'
 import { useEditorBridge } from '../../stores/editor-bridge'
 import { useLineGridStore } from '../../stores/line-grid'
 import { useStructureSync } from '../../composables/useStructureSync'
@@ -25,11 +26,27 @@ import { SmartType } from './extensions/smart-type'
 import { BeatShortcut } from './extensions/beat-shortcut'
 import { createSmartTypeState } from './smarttype/state'
 import SmartTypeDropdown from './SmartTypeDropdown.vue'
+import { LINE_GRID_CONFIG } from './line-grid/constants'
 
 const smartTypeState = createSmartTypeState()
 const editorBridge = useEditorBridge()
 const lineGridStore = useLineGridStore()
+const { snapshot } = storeToRefs(lineGridStore)
 const scrollRef = ref<HTMLElement | null>(null)
+
+const pageContainerStyle = computed(() => {
+  const pageBreakHeight = snapshot.value.pageBreaks.reduce(
+    (sum, pageBreak) => sum + pageBreak.heightPx,
+    0
+  )
+  const editorBodyMinHeight =
+    snapshot.value.totalPages * LINE_GRID_CONFIG.pageLines * LINE_GRID_CONFIG.lineHeight +
+    pageBreakHeight
+
+  return {
+    '--editor-body-min-height': `${editorBodyMinHeight}px`
+  }
+})
 
 const STORAGE_KEY = 'story-studio-scene-doc'
 
@@ -260,7 +277,7 @@ function onPickerKeydown(e: KeyboardEvent): void {
       </div>
     </div>
     <div class="editor-scroll" ref="scrollRef">
-      <div class="page-container">
+      <div class="page-container" :style="pageContainerStyle">
         <EditorContent :editor="editor" />
       </div>
       <!-- 元素选择框 -->
@@ -370,7 +387,7 @@ function onPickerKeydown(e: KeyboardEvent): void {
 /* 编辑器主体 */
 .page-container :deep(.editor-body) {
   outline: none;
-  min-height: calc(var(--page-height) - var(--page-padding-top) - var(--page-padding-bottom));
+  min-height: var(--editor-body-min-height);
   font-family: var(--font-family-screenplay);
   font-size: var(--font-size-screenplay);
   line-height: var(--line-height);
