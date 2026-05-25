@@ -9,9 +9,13 @@ export const FONT_FAMILY = "'Courier Prime', 'Courier New', monospace"
 export const FONT_SIZE_PT = 12
 export const PAGE_NUMBER_FONT_SIZE_PT = 10
 
+const CSS_PX_PER_IN = 96
+
 export const LINE_HEIGHT_PX = 16
 export const PAGE_LINES = 54
-export const PAGE_GAP_PX = 0
+export const PAGE_GAP_PX = 24
+export const PAGE_BREAK_BOTTOM_SPACE_PX = PAGE_PADDING_BOTTOM_IN * CSS_PX_PER_IN
+export const PAGE_BREAK_TOP_SPACE_PX = PAGE_PADDING_TOP_IN * CSS_PX_PER_IN
 export const PAGE_MORE_HEIGHT_PX = 16
 export const PAGE_CONTD_HEIGHT_PX = 16
 

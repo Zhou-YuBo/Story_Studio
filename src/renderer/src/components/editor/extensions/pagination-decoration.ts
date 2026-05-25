@@ -13,11 +13,30 @@ function applyWidgetHeight(el: HTMLElement, heightPx: number): void {
   el.style.lineHeight = `${heightPx}px`
 }
 
-function createPageBreakWidget(pageNumber: number, heightPx: number): HTMLElement {
+function createPageBreakWidget(
+  pageNumber: number,
+  bottomSpacePx: number,
+  gapHeightPx: number,
+  topSpacePx: number
+): HTMLElement {
   const el = document.createElement('div')
-  el.className = 'page-break-line'
-  el.dataset.page = String(pageNumber)
-  applyWidgetHeight(el, heightPx)
+  el.className = 'page-break-widget'
+  el.style.height = `${bottomSpacePx + gapHeightPx + topSpacePx}px`
+
+  const bottomSpace = document.createElement('div')
+  bottomSpace.className = 'page-break-space page-break-bottom-space'
+  applyWidgetHeight(bottomSpace, bottomSpacePx)
+
+  const line = document.createElement('div')
+  line.className = 'page-break-line'
+  line.dataset.page = String(pageNumber)
+  applyWidgetHeight(line, gapHeightPx)
+
+  const topSpace = document.createElement('div')
+  topSpace.className = 'page-break-space page-break-top-space'
+  applyWidgetHeight(topSpace, topSpacePx)
+
+  el.append(bottomSpace, line, topSpace)
   return el
 }
 
@@ -58,7 +77,13 @@ function buildDecorations(doc: PmNode): DecorationSet {
     decorations.push(
       Decoration.widget(
         breakPos,
-        () => createPageBreakWidget(pageNumber, pageBreak.pageGapHeightPx),
+        () =>
+          createPageBreakWidget(
+            pageNumber,
+            pageBreak.breakBottomSpacePx,
+            pageBreak.pageGapHeightPx,
+            pageBreak.breakTopSpacePx
+          ),
         {
           side: 1
         }

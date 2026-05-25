@@ -54,6 +54,8 @@ export interface PageBreakInfo {
   kind: PageBreakKind
   heightPx: number
   pageGapHeightPx: number
+  breakBottomSpacePx: number
+  breakTopSpacePx: number
   moreHeightPx: number
   contdHeightPx: number
   moreContd?: {

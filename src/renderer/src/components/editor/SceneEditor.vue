@@ -510,10 +510,18 @@ function onPickerKeydown(e: KeyboardEvent): void {
 }
 
 /* 分页标记 */
+.page-container :deep(.page-break-widget) {
+  margin: 0 calc(-1 * var(--page-padding-right)) 0 calc(-1 * var(--page-padding-left));
+}
+
+.page-container :deep(.page-break-space) {
+  background: var(--page-background);
+}
+
 .page-container :deep(.page-break-line) {
   border-top: 0;
-  margin: 0 calc(-1 * var(--page-padding-right)) 0 calc(-1 * var(--page-padding-left));
   position: relative;
+  background: var(--page-gap-bg);
 }
 .page-container :deep(.page-break-line)::after {
   content: attr(data-page) '.';

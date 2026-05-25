@@ -1,4 +1,10 @@
-import { PAGE_CONTD_HEIGHT_PX, PAGE_GAP_PX, PAGE_MORE_HEIGHT_PX } from '../page-layout/page-config'
+import {
+  PAGE_BREAK_BOTTOM_SPACE_PX,
+  PAGE_BREAK_TOP_SPACE_PX,
+  PAGE_CONTD_HEIGHT_PX,
+  PAGE_GAP_PX,
+  PAGE_MORE_HEIGHT_PX
+} from '../page-layout/page-config'
 import { countTextLines } from './line-counter'
 import { elementLayoutConfig, LINE_GRID_CONFIG } from './constants'
 import type {
@@ -54,7 +60,12 @@ function createPages(totalLines: number, pageLines: number): PageLineRange[] {
 }
 
 function pageBreakHeight(hasMoreContd: boolean): number {
-  return PAGE_GAP_PX + (hasMoreContd ? PAGE_MORE_HEIGHT_PX + PAGE_CONTD_HEIGHT_PX : 0)
+  return (
+    PAGE_BREAK_BOTTOM_SPACE_PX +
+    PAGE_GAP_PX +
+    PAGE_BREAK_TOP_SPACE_PX +
+    (hasMoreContd ? PAGE_MORE_HEIGHT_PX + PAGE_CONTD_HEIGHT_PX : 0)
+  )
 }
 
 function createPageBreakInfo(
@@ -71,6 +82,8 @@ function createPageBreakInfo(
     kind: hasMoreContd ? 'dialogue' : 'natural',
     heightPx: pageBreakHeight(hasMoreContd),
     pageGapHeightPx: PAGE_GAP_PX,
+    breakBottomSpacePx: PAGE_BREAK_BOTTOM_SPACE_PX,
+    breakTopSpacePx: PAGE_BREAK_TOP_SPACE_PX,
     moreHeightPx: hasMoreContd ? PAGE_MORE_HEIGHT_PX : 0,
     contdHeightPx: hasMoreContd ? PAGE_CONTD_HEIGHT_PX : 0,
     ...(moreContd ? { moreContd } : {})
