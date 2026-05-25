@@ -65,6 +65,16 @@ export function useStructureSync(editorRef: ShallowRef<Editor | undefined>) {
     isSyncing = false
   }
 
+  function syncStructureToEditor(editor: Editor) {
+    if (structureStore.acts.length === 0) return
+
+    if (!hasStructureMarkers(editor.state.doc)) {
+      fullFill(editor)
+    } else {
+      incrementalSync(editor)
+    }
+  }
+
   function incrementalSync(editor: Editor) {
     const doc = editor.state.doc
     const markers = scanMarkers(doc)
@@ -154,9 +164,10 @@ export function useStructureSync(editorRef: ShallowRef<Editor | undefined>) {
           ),
         )
 
-        const insertPos = tr.doc.content.size
+        let insertPos = tr.doc.content.size
         for (const node of nodes) {
           tr.insert(insertPos, node)
+          insertPos += node.nodeSize
         }
       }
     }
@@ -254,12 +265,7 @@ export function useStructureSync(editorRef: ShallowRef<Editor | undefined>) {
     () => {
       const editor = editorRef.value
       if (!editor || isSyncing) return
-
-      if (!hasStructureMarkers(editor.state.doc)) {
-        fullFill(editor)
-      } else {
-        incrementalSync(editor)
-      }
+      syncStructureToEditor(editor)
     },
     { deep: true },
   )
@@ -267,10 +273,8 @@ export function useStructureSync(editorRef: ShallowRef<Editor | undefined>) {
   watch(
     editorRef,
     (editor) => {
-      if (!editor || structureStore.acts.length === 0) return
-      if (!hasStructureMarkers(editor.state.doc)) {
-        fullFill(editor)
-      }
+      if (!editor || isSyncing) return
+      syncStructureToEditor(editor)
     },
     { immediate: true },
   )
