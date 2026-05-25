@@ -1,3 +1,4 @@
+import { PAGE_CONTD_HEIGHT_PX, PAGE_GAP_PX, PAGE_MORE_HEIGHT_PX } from '../page-layout/page-config'
 import { countTextLines } from './line-counter'
 import { elementLayoutConfig, LINE_GRID_CONFIG } from './constants'
 import type {
@@ -7,7 +8,7 @@ import type {
   MarkerLineRange,
   PageBreakInfo,
   PageLineRange,
-  ScreenplayBlock,
+  ScreenplayBlock
 } from './types'
 
 function marginTopLines(block: ScreenplayBlock, line: number, config: LineGridConfig): number {
@@ -39,7 +40,7 @@ function createMarker(block: BlockLineRange): MarkerLineRange | null {
     blockIndex: block.blockIndex,
     lineIndex: block.contentStartLine,
     pos: block.pos,
-    nodeSize: block.nodeSize,
+    nodeSize: block.nodeSize
   }
 }
 
@@ -48,8 +49,32 @@ function createPages(totalLines: number, pageLines: number): PageLineRange[] {
   return Array.from({ length: totalPages }, (_, pageIndex) => ({
     pageIndex,
     startLine: pageIndex * pageLines,
-    endLine: (pageIndex + 1) * pageLines,
+    endLine: (pageIndex + 1) * pageLines
   }))
+}
+
+function pageBreakHeight(hasMoreContd: boolean): number {
+  return PAGE_GAP_PX + (hasMoreContd ? PAGE_MORE_HEIGHT_PX + PAGE_CONTD_HEIGHT_PX : 0)
+}
+
+function createPageBreakInfo(
+  afterBlockIndex: number,
+  linesUsed: number,
+  lineIndex: number,
+  moreContd?: PageBreakInfo['moreContd']
+): PageBreakInfo {
+  const hasMoreContd = Boolean(moreContd)
+  return {
+    afterBlockIndex,
+    linesUsed,
+    lineIndex,
+    kind: hasMoreContd ? 'dialogue' : 'natural',
+    heightPx: pageBreakHeight(hasMoreContd),
+    pageGapHeightPx: PAGE_GAP_PX,
+    moreHeightPx: hasMoreContd ? PAGE_MORE_HEIGHT_PX : 0,
+    contdHeightPx: hasMoreContd ? PAGE_CONTD_HEIGHT_PX : 0,
+    ...(moreContd ? { moreContd } : {})
+  }
 }
 
 function createPageBreaks(blocks: BlockLineRange[], pageLines: number): PageBreakInfo[] {
@@ -59,11 +84,13 @@ function createPageBreaks(blocks: BlockLineRange[], pageLines: number): PageBrea
     const previous = blocks[i - 1]
     const current = blocks[i]
     if (Math.floor(previous.endLine / pageLines) < Math.floor(current.endLine / pageLines)) {
-      pageBreaks.push({
-        afterBlockIndex: previous.blockIndex,
-        linesUsed: previous.endLine % pageLines || pageLines,
-        lineIndex: Math.ceil(previous.endLine / pageLines) * pageLines,
-      })
+      pageBreaks.push(
+        createPageBreakInfo(
+          previous.blockIndex,
+          previous.endLine % pageLines || pageLines,
+          Math.ceil(previous.endLine / pageLines) * pageLines
+        )
+      )
     }
   }
 
@@ -79,19 +106,16 @@ function createPageBreaks(blocks: BlockLineRange[], pageLines: number): PageBrea
     const existing = pageBreaks.find((pageBreak) => pageBreak.afterBlockIndex === block.blockIndex)
     const moreContd = {
       characterName: findCharacterName(blocks, block.blockIndex),
-      splitAtLine,
+      splitAtLine
     }
 
     if (existing) {
-      existing.moreContd = moreContd
-      existing.linesUsed = pageLines
+      Object.assign(
+        existing,
+        createPageBreakInfo(block.blockIndex, pageLines, existing.lineIndex, moreContd)
+      )
     } else {
-      pageBreaks.push({
-        afterBlockIndex: block.blockIndex,
-        linesUsed: pageLines,
-        lineIndex: pageEnd,
-        moreContd,
-      })
+      pageBreaks.push(createPageBreakInfo(block.blockIndex, pageLines, pageEnd, moreContd))
     }
   }
 
@@ -100,7 +124,7 @@ function createPageBreaks(blocks: BlockLineRange[], pageLines: number): PageBrea
 
 export function buildLineGrid(
   sourceBlocks: ScreenplayBlock[],
-  config: LineGridConfig = LINE_GRID_CONFIG,
+  config: LineGridConfig = LINE_GRID_CONFIG
 ): LineGridSnapshot {
   const blocks: BlockLineRange[] = []
   const markers: MarkerLineRange[] = []
@@ -123,7 +147,7 @@ export function buildLineGrid(
       contentStartLine,
       endLine,
       pageIndex,
-      lineInPage,
+      lineInPage
     }
 
     blocks.push(range)
@@ -143,6 +167,6 @@ export function buildLineGrid(
     pages,
     markers,
     pageBreaks,
-    totalPages: pages.length,
+    totalPages: pages.length
   }
 }

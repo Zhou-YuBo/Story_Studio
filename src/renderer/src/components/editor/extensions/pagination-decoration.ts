@@ -8,24 +8,32 @@ import { extractScreenplayBlocks } from '../line-grid/extract-blocks'
 
 const pluginKey = new PluginKey('paginationDecoration')
 
-function createPageBreakWidget(pageNumber: number): HTMLElement {
+function applyWidgetHeight(el: HTMLElement, heightPx: number): void {
+  el.style.height = `${heightPx}px`
+  el.style.lineHeight = `${heightPx}px`
+}
+
+function createPageBreakWidget(pageNumber: number, heightPx: number): HTMLElement {
   const el = document.createElement('div')
   el.className = 'page-break-line'
   el.dataset.page = String(pageNumber)
+  applyWidgetHeight(el, heightPx)
   return el
 }
 
-function createMoreWidget(): HTMLElement {
+function createMoreWidget(heightPx: number): HTMLElement {
   const el = document.createElement('div')
   el.className = 'page-more'
   el.textContent = '(MORE)'
+  applyWidgetHeight(el, heightPx)
   return el
 }
 
-function createContdWidget(characterName: string): HTMLElement {
+function createContdWidget(characterName: string, heightPx: number): HTMLElement {
   const el = document.createElement('div')
   el.className = 'page-contd'
   el.textContent = `${characterName} (CONT'D)`
+  applyWidgetHeight(el, heightPx)
   return el
 }
 
@@ -42,15 +50,31 @@ function buildDecorations(doc: PmNode): DecorationSet {
     const breakPos = block.pos + block.nodeSize
 
     if (pageBreak.moreContd) {
-      decorations.push(Decoration.widget(breakPos, () => createMoreWidget(), { side: 1 }))
+      decorations.push(
+        Decoration.widget(breakPos, () => createMoreWidget(pageBreak.moreHeightPx), { side: 1 })
+      )
     }
 
-    decorations.push(Decoration.widget(breakPos, () => createPageBreakWidget(pageNumber), { side: 1 }))
+    decorations.push(
+      Decoration.widget(
+        breakPos,
+        () => createPageBreakWidget(pageNumber, pageBreak.pageGapHeightPx),
+        {
+          side: 1
+        }
+      )
+    )
 
     const characterName = pageBreak.moreContd?.characterName
     if (characterName) {
       decorations.push(
-        Decoration.widget(breakPos, () => createContdWidget(characterName), { side: 1 }),
+        Decoration.widget(
+          breakPos,
+          () => createContdWidget(characterName, pageBreak.contdHeightPx),
+          {
+            side: 1
+          }
+        )
       )
     }
   }
@@ -72,14 +96,14 @@ export const PaginationDecoration = Extension.create({
           apply(tr, oldDecoSet) {
             if (!tr.docChanged) return oldDecoSet.map(tr.mapping, tr.doc)
             return buildDecorations(tr.doc)
-          },
+          }
         },
         props: {
           decorations(state) {
             return pluginKey.getState(state) as DecorationSet
-          },
-        },
-      }),
+          }
+        }
+      })
     ]
-  },
+  }
 })

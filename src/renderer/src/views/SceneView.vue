@@ -42,7 +42,7 @@ import BeatBoard from '../components/beat/BeatBoard.vue'
 }
 
 .scene-center-panel {
-  width: 8.5in;
+  width: var(--page-width);
   flex-shrink: 0;
   display: flex;
   flex-direction: column;

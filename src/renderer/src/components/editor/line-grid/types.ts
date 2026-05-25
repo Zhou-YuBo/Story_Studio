@@ -45,10 +45,17 @@ export interface MarkerLineRange {
   nodeSize: number
 }
 
+export type PageBreakKind = 'natural' | 'dialogue' | 'forced'
+
 export interface PageBreakInfo {
   afterBlockIndex: number
   linesUsed: number
   lineIndex: number
+  kind: PageBreakKind
+  heightPx: number
+  pageGapHeightPx: number
+  moreHeightPx: number
+  contdHeightPx: number
   moreContd?: {
     characterName: string
     splitAtLine: number

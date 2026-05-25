@@ -8,12 +8,12 @@ import {
   blockIndexToRange,
   docPosToLineIndex,
   docPosToVisualLineIndex,
-  gapIndexToY,
+  gapIndexToYInSnapshot,
   lineIndexToBlock,
   lineIndexToNearestDocPos,
-  lineIndexToY,
-  yToGapIndex,
-  yToLineIndex,
+  lineIndexToYInSnapshot,
+  yToGapIndexInSnapshot,
+  yToLineIndexInSnapshot
 } from '../components/editor/line-grid/lookups'
 import type { LineGridSnapshot } from '../components/editor/line-grid/types'
 
@@ -24,7 +24,7 @@ const EMPTY_SNAPSHOT: LineGridSnapshot = {
   pages: [{ pageIndex: 0, startLine: 0, endLine: LINE_GRID_CONFIG.pageLines }],
   markers: [],
   pageBreaks: [],
-  totalPages: 1,
+  totalPages: 1
 }
 
 export const useLineGridStore = defineStore('lineGrid', () => {
@@ -40,6 +40,22 @@ export const useLineGridStore = defineStore('lineGrid', () => {
     snapshot.value = EMPTY_SNAPSHOT
   }
 
+  function gapIndexToY(gapIndex: number): number {
+    return gapIndexToYInSnapshot(snapshot.value, gapIndex, LINE_GRID_CONFIG)
+  }
+
+  function lineIndexToY(lineIndex: number): number {
+    return lineIndexToYInSnapshot(snapshot.value, lineIndex, LINE_GRID_CONFIG)
+  }
+
+  function yToGapIndex(y: number): number {
+    return yToGapIndexInSnapshot(snapshot.value, y, LINE_GRID_CONFIG)
+  }
+
+  function yToLineIndex(y: number): number {
+    return yToLineIndexInSnapshot(snapshot.value, y, LINE_GRID_CONFIG)
+  }
+
   return {
     snapshot,
     rebuild,
@@ -52,6 +68,6 @@ export const useLineGridStore = defineStore('lineGrid', () => {
     lineIndexToNearestDocPos,
     lineIndexToY,
     yToGapIndex,
-    yToLineIndex,
+    yToLineIndex
   }
 })

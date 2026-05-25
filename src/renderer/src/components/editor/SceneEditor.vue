@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useEditor, EditorContent } from '@tiptap/vue-3'
+import { useEditor, EditorContent, type Editor } from '@tiptap/vue-3'
 import StarterKit from '@tiptap/starter-kit'
 import { ref, onBeforeUnmount, onMounted, watchEffect, nextTick } from 'vue'
 import { useEditorBridge } from '../../stores/editor-bridge'
@@ -47,12 +47,12 @@ const screenplayElements = [
   Note,
   NewAct,
   EndOfAct,
-  Sequence,
+  Sequence
 ]
 
 const defaultContent = { type: 'doc', content: [{ type: 'sceneHeading' }] }
 
-function loadContent() {
+function loadContent(): typeof defaultContent | Record<string, unknown> {
   const raw = localStorage.getItem(STORAGE_KEY)
   if (!raw) return defaultContent
   try {
@@ -77,7 +77,7 @@ const editor = useEditor({
       horizontalRule: false,
       code: false,
       strike: false,
-      hardBreak: false,
+      hardBreak: false
     }),
     ...screenplayElements,
     SmartType.configure({ state: smartTypeState }),
@@ -87,9 +87,9 @@ const editor = useEditor({
   ],
   editorProps: {
     attributes: {
-      class: 'editor-body',
-    },
-  },
+      class: 'editor-body'
+    }
+  }
 })
 
 useStructureSync(editor)
@@ -126,12 +126,13 @@ const elementButtons = [
   { label: '镜头', type: 'shot', shortcut: 'H' },
   { label: '演员表', type: 'castList', shortcut: 'L' },
   { label: '梗概', type: 'summary', shortcut: '0' },
-  { label: '批注', type: 'note', shortcut: '4' },
+  { label: '批注', type: 'note', shortcut: '4' }
 ]
 
-function toggleElement(type: string) {
+function toggleElement(type: string): void {
   if (!editor.value) return
-  const cmd = `toggle${type.charAt(0).toUpperCase()}${type.slice(1)}` as keyof typeof editor.value.commands
+  const cmd =
+    `toggle${type.charAt(0).toUpperCase()}${type.slice(1)}` as keyof typeof editor.value.commands
   if (typeof editor.value.commands[cmd] === 'function') {
     ;(editor.value.commands[cmd] as () => boolean)()
     editor.value.commands.focus()
@@ -145,38 +146,44 @@ const pickerRef = ref<HTMLDivElement | null>(null)
 const pickerPosition = ref({ top: 0, left: 0 })
 const pickerSelectedIndex = ref(0)
 
+type EditorWithEmptyEnter = Editor & {
+  on(event: 'empty-enter', callback: () => void): void
+}
+
+function onEmptyEnter(editorInstance: Editor): void {
+  const { from } = editorInstance.state.selection
+  const coords = editorInstance.view.coordsAtPos(from)
+  pickerPosition.value = { top: coords.bottom + 4, left: coords.left }
+  pickerSelectedIndex.value = 0
+  elementPickerVisible.value = true
+  nextTick(() => pickerRef.value?.focus())
+}
+
 onMounted(() => {
   if (!editor.value) return
   if (scrollRef.value) {
     editorBridge.register(editor.value, scrollRef.value)
   }
-  editor.value.on('empty-enter' as any, () => {
-    const { from } = editor.value!.state.selection
-    const coords = editor.value!.view.coordsAtPos(from)
-    pickerPosition.value = { top: coords.bottom + 4, left: coords.left }
-    pickerSelectedIndex.value = 0
-    elementPickerVisible.value = true
-    nextTick(() => pickerRef.value?.focus())
-  })
+  ;(editor.value as EditorWithEmptyEnter).on('empty-enter', () => onEmptyEnter(editor.value!))
 })
 
-function selectElementFromPicker(type: string) {
+function selectElementFromPicker(type: string): void {
   if (!editor.value) return
   editor.value.chain().focus().setNode(type).run()
   elementPickerVisible.value = false
 }
 
-function pickerStyle() {
+function pickerStyle(): { position: 'fixed'; top: string; left: string; zIndex: number } {
   const { top, left } = pickerPosition.value
   return {
     position: 'fixed' as const,
     top: `${Math.max(0, Math.min(top, window.innerHeight - 400))}px`,
     left: `${Math.max(0, Math.min(left, window.innerWidth - 220))}px`,
-    zIndex: 1000,
+    zIndex: 1000
   }
 }
 
-function onPickerKeydown(e: KeyboardEvent) {
+function onPickerKeydown(e: KeyboardEvent): void {
   if (e.key === 'ArrowDown') {
     e.preventDefault()
     pickerSelectedIndex.value = (pickerSelectedIndex.value + 1) % elementButtons.length
@@ -184,7 +191,8 @@ function onPickerKeydown(e: KeyboardEvent) {
   }
   if (e.key === 'ArrowUp') {
     e.preventDefault()
-    pickerSelectedIndex.value = (pickerSelectedIndex.value - 1 + elementButtons.length) % elementButtons.length
+    pickerSelectedIndex.value =
+      (pickerSelectedIndex.value - 1 + elementButtons.length) % elementButtons.length
     return
   }
   if (e.key === 'Enter') {
@@ -208,7 +216,7 @@ function onPickerKeydown(e: KeyboardEvent) {
     h: 'shot',
     l: 'castList',
     '0': 'summary',
-    '4': 'note',
+    '4': 'note'
   }
   const target = keyMap[e.key.toLowerCase()]
   if (target) {
@@ -221,36 +229,36 @@ function onPickerKeydown(e: KeyboardEvent) {
 <template>
   <div class="scene-editor">
     <div v-if="editor" class="toolbar">
-        <div class="toolbar-group">
-          <button
-            v-for="btn in elementButtons"
-            :key="btn.type"
-            :class="{ active: editor.isActive(btn.type) }"
-            @click="toggleElement(btn.type)"
-            :title="btn.label"
-            class="element-btn"
-          >
-            {{ btn.label }}
-          </button>
-        </div>
-        <div class="toolbar-divider" />
-        <div class="toolbar-group">
-          <button
-            :class="{ active: editor.isActive('bold') }"
-            @click="editor.chain().focus().toggleBold().run()"
-            title="加粗"
-          >
-            B
-          </button>
-          <button
-            :class="{ active: editor.isActive('italic') }"
-            @click="editor.chain().focus().toggleItalic().run()"
-            title="斜体"
-          >
-            I
-          </button>
-        </div>
+      <div class="toolbar-group">
+        <button
+          v-for="btn in elementButtons"
+          :key="btn.type"
+          :class="{ active: editor.isActive(btn.type) }"
+          @click="toggleElement(btn.type)"
+          :title="btn.label"
+          class="element-btn"
+        >
+          {{ btn.label }}
+        </button>
       </div>
+      <div class="toolbar-divider" />
+      <div class="toolbar-group">
+        <button
+          :class="{ active: editor.isActive('bold') }"
+          @click="editor.chain().focus().toggleBold().run()"
+          title="加粗"
+        >
+          B
+        </button>
+        <button
+          :class="{ active: editor.isActive('italic') }"
+          @click="editor.chain().focus().toggleItalic().run()"
+          title="斜体"
+        >
+          I
+        </button>
+      </div>
+    </div>
     <div class="editor-scroll" ref="scrollRef">
       <div class="page-container">
         <EditorContent :editor="editor" />
@@ -352,26 +360,27 @@ function onPickerKeydown(e: KeyboardEvent) {
 /* 白色页面容器 */
 .page-container {
   width: 100%;
-  min-height: 11in;
-  background: #e8e0d0;
+  min-height: var(--page-height);
+  background: var(--page-background);
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
-  padding: 1in 1in 1in 1.5in;
+  padding: var(--page-padding-top) var(--page-padding-right) var(--page-padding-bottom)
+    var(--page-padding-left);
 }
 
 /* 编辑器主体 */
 .page-container :deep(.editor-body) {
   outline: none;
-  min-height: 9in;
-  font-family: 'Courier Prime', 'Courier New', monospace;
-  font-size: 12pt;
-  line-height: 16px;
+  min-height: calc(var(--page-height) - var(--page-padding-top) - var(--page-padding-bottom));
+  font-family: var(--font-family-screenplay);
+  font-size: var(--font-size-screenplay);
+  line-height: var(--line-height);
   color: #000;
   caret-color: #1a1a1a;
 }
 
 .page-container :deep(.editor-body p) {
   margin: 0;
-  line-height: 16px;
+  line-height: var(--line-height);
 }
 
 .page-container :deep(.editor-body .screenplay-scene-heading.is-editor-empty:first-child::before) {
@@ -386,40 +395,42 @@ function onPickerKeydown(e: KeyboardEvent) {
 /* ===== 剧本元素真实排版 ===== */
 
 .page-container :deep(.screenplay-scene-heading) {
-  margin: 32px 0 0;
+  margin: var(--margin-sceneHeading) 0 0;
   text-transform: uppercase;
   font-weight: 700;
-  line-height: 16px;
+  line-height: var(--line-height);
 }
-.page-container :deep(.screenplay-scene-heading:first-child) {
+.page-container :deep(.screenplay-scene-heading:first-child),
+.page-container :deep(.screenplay-new-act:first-child),
+.page-container :deep(.screenplay-sequence:first-child) {
   margin-top: 0;
 }
 
 .page-container :deep(.screenplay-action) {
-  margin: 16px 0 0;
-  line-height: 16px;
+  margin: var(--margin-action) 0 0;
+  line-height: var(--line-height);
 }
 
 .page-container :deep(.screenplay-character) {
-  margin: 16px 0 0;
-  padding-left: 211px;
+  margin: var(--margin-character) 0 0;
+  padding-left: var(--pad-left-character);
   text-transform: uppercase;
-  line-height: 16px;
+  line-height: var(--line-height);
 }
 
 .page-container :deep(.screenplay-dialogue) {
   margin: 0;
-  padding-left: 96px;
-  padding-right: 144px;
-  line-height: 16px;
+  padding-left: var(--pad-left-dialogue);
+  padding-right: var(--pad-right-dialogue);
+  line-height: var(--line-height);
 }
 
 .page-container :deep(.screenplay-parenthetical) {
   margin: 0;
-  padding-left: 154px;
-  padding-right: 182px;
+  padding-left: var(--pad-left-parenthetical);
+  padding-right: var(--pad-right-parenthetical);
   font-style: italic;
-  line-height: 16px;
+  line-height: var(--line-height);
 }
 
 .page-container :deep(.screenplay-parenthetical.is-empty) {
@@ -433,60 +444,75 @@ function onPickerKeydown(e: KeyboardEvent) {
 }
 
 .page-container :deep(.screenplay-transition) {
-  margin: 16px 0 0;
+  margin: var(--margin-transition) 0 0;
   text-align: right;
   text-transform: uppercase;
-  line-height: 16px;
+  line-height: var(--line-height);
 }
 
 .page-container :deep(.screenplay-general) {
   margin: 0;
-  line-height: 16px;
+  line-height: var(--line-height);
 }
 
 .page-container :deep(.screenplay-shot) {
-  margin: 16px 0 0;
+  margin: var(--margin-shot) 0 0;
   text-transform: uppercase;
   font-weight: 700;
-  line-height: 16px;
+  line-height: var(--line-height);
 }
 
 .page-container :deep(.screenplay-cast-list) {
-  margin: 16px 0 0;
-  line-height: 16px;
+  margin: var(--margin-castList) 0 0;
+  line-height: var(--line-height);
 }
 
 .page-container :deep(.screenplay-summary) {
-  margin: 16px 0 0;
-  padding-left: 96px;
-  padding-right: 48px;
-  line-height: 16px;
+  margin: var(--margin-summary) 0 0;
+  padding-left: var(--pad-left-summary);
+  padding-right: var(--pad-right-summary);
+  line-height: var(--line-height);
 }
 
 .page-container :deep(.screenplay-note) {
   margin: 0;
-  padding-left: 96px;
-  padding-right: 48px;
+  padding-left: var(--pad-left-note);
+  padding-right: var(--pad-right-note);
   font-style: italic;
-  line-height: 16px;
+  line-height: var(--line-height);
 }
 
-.page-container :deep(.screenplay-new-act),
-.page-container :deep(.screenplay-end-of-act),
-.page-container :deep(.screenplay-sequence) {
-  margin: 16px 0 0;
+.page-container :deep(.screenplay-new-act) {
+  margin: var(--margin-newAct) 0 0;
   text-align: center;
   text-transform: uppercase;
   font-weight: 700;
   text-decoration: underline;
-  line-height: 16px;
+  line-height: var(--line-height);
+}
+
+.page-container :deep(.screenplay-end-of-act) {
+  margin: var(--margin-endOfAct) 0 0;
+  text-align: center;
+  text-transform: uppercase;
+  font-weight: 700;
+  text-decoration: underline;
+  line-height: var(--line-height);
+}
+
+.page-container :deep(.screenplay-sequence) {
+  margin: var(--margin-sequence) 0 0;
+  text-align: center;
+  text-transform: uppercase;
+  font-weight: 700;
+  text-decoration: underline;
+  line-height: var(--line-height);
 }
 
 /* 分页标记 */
 .page-container :deep(.page-break-line) {
-  height: 0;
   border-top: 0;
-  margin: 0 -1in 0 -1.5in;
+  margin: 0 calc(-1 * var(--page-padding-right)) 0 calc(-1 * var(--page-padding-left));
   position: relative;
 }
 .page-container :deep(.page-break-line)::after {
@@ -494,24 +520,22 @@ function onPickerKeydown(e: KeyboardEvent) {
   position: absolute;
   right: 0;
   top: -18px;
-  font-size: 10pt;
+  font-size: var(--page-number-font-size);
   color: #999;
-  font-family: 'Courier Prime', 'Courier New', monospace;
+  font-family: var(--font-family-screenplay);
 }
 
 .page-container :deep(.page-more) {
   text-align: center;
   color: #999;
-  line-height: 16px;
-  padding-left: 96px;
-  padding-right: 144px;
+  padding-left: var(--pad-left-dialogue);
+  padding-right: var(--pad-right-dialogue);
 }
 
 .page-container :deep(.page-contd) {
   text-align: left;
   color: #999;
-  line-height: 16px;
-  padding-left: 211px;
+  padding-left: var(--pad-left-character);
   text-transform: uppercase;
 }
 
