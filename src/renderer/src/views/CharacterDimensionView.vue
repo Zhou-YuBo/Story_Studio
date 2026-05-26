@@ -1,121 +1,85 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
-import CharacterDimensionWheel, {
-  type CharacterDimensionPair,
-  type CharacterDimensionSlot,
-} from '../components/character/CharacterDimensionWheel.vue'
+import { computed, ref, watch } from 'vue'
+import CharacterDimensionWheel, { type CharacterDimensionSlot } from '../components/character/CharacterDimensionWheel.vue'
+import { useCharacterStore } from '../stores/character'
 
-interface EditableDimension extends CharacterDimensionPair {
-  note: string
-}
+const characterStore = useCharacterStore()
+const selectedDimensionId = ref('')
 
-const characters = [
-  { id: 'lin-che', name: '林澈', layer: '主角' },
-  { id: 'zhou-yi-an', name: '周以安', layer: '第一圈人物' },
-  { id: 'chen', name: '老陈', layer: '第一圈人物' },
-]
-
-const activeCharacterId = ref(characters[0].id)
-const selectedDimensionId = ref('connection-loss')
-
-const dimensions = reactive<EditableDimension[]>([
-  {
-    id: 'connection-loss',
-    positive: '渴望连接',
-    negative: '相信消失',
-    note: '他越渴望关系稳定，越会提前为失去做准备。',
-  },
-  {
-    id: 'control-collapse',
-    positive: '控制',
-    negative: '失控',
-    note: '他用计划和秩序抵抗情感里的不可控。',
-  },
-  {
-    id: 'honesty-deception',
-    positive: '诚实',
-    negative: '自我欺骗',
-    note: '他要求别人坦白，却最擅长把自己的恐惧解释成理性。',
-  },
-  {
-    id: 'tender-cruel',
-    positive: '温柔',
-    negative: '残酷',
-    note: '他的温柔常常在压力下变成切断关系的冷酷。',
-  },
-])
-
-const slots = reactive<CharacterDimensionSlot[]>([
-  { dimensionId: 'connection-loss' },
-  { dimensionId: 'control-collapse' },
-  { dimensionId: 'honesty-deception' },
-  { dimensionId: 'tender-cruel' },
-])
+const dimensionCharacters = computed(() => {
+  return characterStore.characters.filter((character) =>
+    ['主角', '第一圈人物'].includes(character.profile.layer),
+  )
+})
 
 const activeCharacter = computed(() => {
-  return characters.find((character) => character.id === activeCharacterId.value) ?? characters[0]
+  return characterStore.getCharacterById(characterStore.activeCharacterId) ?? dimensionCharacters.value[0]
+})
+
+const dimensions = computed(() => activeCharacter.value?.dimensions ?? [])
+
+const slots = computed<CharacterDimensionSlot[]>(() => {
+  return dimensions.value.map((dimension) => ({
+    dimensionId: dimension.id,
+    inverted: dimension.inverted,
+  }))
 })
 
 const selectedDimension = computed(() => {
-  return dimensions.find((dimension) => dimension.id === selectedDimensionId.value) ?? dimensions[0]
+  return dimensions.value.find((dimension) => dimension.id === selectedDimensionId.value) ?? dimensions.value[0]
 })
 
 const selectedSlotIndex = computed(() => {
-  return slots.findIndex((slot) => slot.dimensionId === selectedDimension.value?.id)
+  return dimensions.value.findIndex((dimension) => dimension.id === selectedDimension.value?.id)
 })
+
+watch(
+  dimensions,
+  (nextDimensions) => {
+    if (!nextDimensions.length) {
+      selectedDimensionId.value = ''
+      return
+    }
+
+    if (!nextDimensions.some((dimension) => dimension.id === selectedDimensionId.value)) {
+      selectedDimensionId.value = nextDimensions[0].id
+    }
+  },
+  { immediate: true },
+)
 
 function selectDimension(dimensionId: string) {
   selectedDimensionId.value = dimensionId
 }
 
+function setActiveCharacter(characterId: string) {
+  characterStore.setActiveCharacter(characterId)
+}
+
 function addDimension() {
-  const nextIndex = dimensions.length + 1
-  const id = `dimension-${Date.now()}`
-  dimensions.push({
-    id,
-    positive: `价值 ${nextIndex}`,
-    negative: `反价值 ${nextIndex}`,
-    note: '',
-  })
-  slots.push({ dimensionId: id })
-  selectedDimensionId.value = id
+  if (!activeCharacter.value) return
+  const dimension = characterStore.addDimension(activeCharacter.value.id)
+  if (dimension) selectedDimensionId.value = dimension.id
 }
 
 function removeDimension(dimensionId: string) {
-  if (dimensions.length <= 1) return
-
-  const dimensionIndex = dimensions.findIndex((dimension) => dimension.id === dimensionId)
-  if (dimensionIndex >= 0) dimensions.splice(dimensionIndex, 1)
-
-  const slotIndex = slots.findIndex((slot) => slot.dimensionId === dimensionId)
-  if (slotIndex >= 0) slots.splice(slotIndex, 1)
-
-  if (selectedDimensionId.value === dimensionId) {
-    selectedDimensionId.value = slots[0]?.dimensionId ?? dimensions[0]?.id ?? ''
-  }
+  if (!activeCharacter.value) return
+  characterStore.removeDimension(activeCharacter.value.id, dimensionId)
 }
 
 function setCoreDimension(dimensionId: string) {
-  const slotIndex = slots.findIndex((slot) => slot.dimensionId === dimensionId)
-  if (slotIndex <= 0) return
-
-  const [slot] = slots.splice(slotIndex, 1)
-  slots.unshift(slot)
+  if (!activeCharacter.value) return
+  characterStore.setCoreDimension(activeCharacter.value.id, dimensionId)
 }
 
 function moveDimension(dimensionId: string, direction: -1 | 1) {
-  const slotIndex = slots.findIndex((slot) => slot.dimensionId === dimensionId)
-  const targetIndex = slotIndex + direction
-  if (slotIndex <= 0 || targetIndex <= 0 || targetIndex >= slots.length) return
-
-  const [slot] = slots.splice(slotIndex, 1)
-  slots.splice(targetIndex, 0, slot)
+  if (!activeCharacter.value) return
+  characterStore.moveDimension(activeCharacter.value.id, dimensionId, direction)
 }
 
 function invertDimension(dimensionId: string) {
-  const slot = slots.find((item) => item.dimensionId === dimensionId)
-  if (!slot) return
-  slot.inverted = !slot.inverted
+  if (!activeCharacter.value) return
+  characterStore.invertDimension(activeCharacter.value.id, dimensionId)
 }
 </script>
 
@@ -130,21 +94,21 @@ function invertDimension(dimensionId: string) {
         <RouterLink class="back-button" to="/character">返回首页</RouterLink>
         <label class="character-select">
           <span>当前人物</span>
-          <select v-model="activeCharacterId">
-            <option v-for="character in characters" :key="character.id" :value="character.id">
-              {{ character.name }} · {{ character.layer }}
+          <select :value="activeCharacter?.id" @change="setActiveCharacter(($event.target as HTMLSelectElement).value)">
+            <option v-for="character in dimensionCharacters" :key="character.id" :value="character.id">
+              {{ character.profile.name }} · {{ character.profile.layer }}
             </option>
           </select>
         </label>
-        <button class="detail-button" type="button">人物详情</button>
+        <RouterLink class="detail-button" to="/character/list">人物详情</RouterLink>
       </div>
     </header>
 
     <main class="dimension-stage">
       <section class="wheel-panel" aria-label="维度圈">
         <div class="wheel-meta">
-          <span>{{ activeCharacter.name }}</span>
-          <span>{{ activeCharacter.layer }}</span>
+          <span>{{ activeCharacter?.profile.name }}</span>
+          <span>{{ activeCharacter?.profile.layer }}</span>
           <span>核心维度固定在竖向主轴</span>
         </div>
         <div class="wheel-frame">
@@ -204,17 +168,22 @@ function invertDimension(dimensionId: string) {
 
           <label class="field-block">
             <span>上端 / 正向关键词</span>
-            <input v-model="selectedDimension.positive" />
+            <input v-model="selectedDimension.positive" @blur="characterStore.saveCharacters" />
           </label>
 
           <label class="field-block">
             <span>下端 / 反向关键词</span>
-            <input v-model="selectedDimension.negative" />
+            <input v-model="selectedDimension.negative" @blur="characterStore.saveCharacters" />
           </label>
 
           <label class="field-block">
             <span>这组矛盾意味着</span>
-            <textarea v-model="selectedDimension.note" rows="4" placeholder="写下这组矛盾如何影响人物行动。" />
+            <textarea
+              v-model="selectedDimension.note"
+              rows="4"
+              placeholder="写下这组矛盾如何影响人物行动。"
+              @blur="characterStore.saveCharacters"
+            />
           </label>
 
           <div class="action-grid">

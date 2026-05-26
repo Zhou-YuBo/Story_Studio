@@ -22,7 +22,7 @@ const overviewDimensionSlots: CharacterDimensionSlot[] = [
 <template>
   <div class="character-workbench">
     <div class="workbench-shell">
-      <button class="corner-entry corner-entry-left-top" type="button" aria-label="人物列表">
+      <RouterLink class="corner-entry corner-entry-left-top" to="/character/list" aria-label="人物列表">
         <span class="entry-kicker">演员名册</span>
         <span class="entry-title">人物列表</span>
         <span class="entry-copy">进入单个人物档案，整理人物真相、语言方式、欲望与恐惧。</span>
@@ -31,7 +31,7 @@ const overviewDimensionSlots: CharacterDimensionSlot[] = [
           <span>第一圈 4</span>
           <span>待整理 7</span>
         </span>
-      </button>
+      </RouterLink>
 
       <button class="corner-entry corner-entry-right-top" type="button" aria-label="二人关系">
         <span class="entry-kicker">关系中的自我</span>
