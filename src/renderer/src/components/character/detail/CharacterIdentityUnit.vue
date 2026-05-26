@@ -3,6 +3,7 @@ import type { CharacterLayer, CharacterProfile } from './types'
 
 defineProps<{
   profile: CharacterProfile
+  compact?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -13,7 +14,7 @@ const layers: CharacterLayer[] = ['主角', '第一圈人物', '第二圈人物'
 </script>
 
 <template>
-  <section class="identity-unit">
+  <section class="identity-unit" :class="{ 'identity-unit-compact': compact }">
     <div class="identity-meta">
       <select v-model="profile.layer" @change="emit('save')">
         <option v-for="layer in layers" :key="layer" :value="layer">{{ layer }}</option>
@@ -24,7 +25,7 @@ const layers: CharacterLayer[] = ['主角', '第一圈人物', '第二圈人物'
     <textarea
       v-model="profile.logline"
       class="logline-input"
-      rows="2"
+      :rows="compact ? 3 : 2"
       placeholder="一句话定义这个人物的核心矛盾"
       @blur="emit('save')"
     />
@@ -41,11 +42,21 @@ const layers: CharacterLayer[] = ['主角', '第一圈人物', '第二圈人物'
   padding: 28px;
 }
 
+.identity-unit-compact {
+  border-radius: 20px;
+  padding: 18px;
+}
+
 .identity-meta {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
   margin-bottom: 18px;
+}
+
+.identity-unit-compact .identity-meta {
+  display: grid;
+  margin-bottom: 12px;
 }
 
 .identity-meta select,
@@ -71,6 +82,11 @@ const layers: CharacterLayer[] = ['主角', '第一圈人物', '第二圈人物'
   min-width: 360px;
 }
 
+.identity-unit-compact .identity-meta input {
+  min-width: 0;
+  width: 100%;
+}
+
 .name-input {
   display: block;
   width: 100%;
@@ -84,6 +100,11 @@ const layers: CharacterLayer[] = ['主角', '第一圈人物', '第二圈人物'
   letter-spacing: 0.08em;
 }
 
+.identity-unit-compact .name-input {
+  max-width: none;
+  font-size: 26px;
+}
+
 .logline-input {
   width: 100%;
   max-width: 900px;
@@ -93,5 +114,12 @@ const layers: CharacterLayer[] = ['主角', '第一圈人物', '第二圈人物'
   font-size: 22px;
   line-height: 1.75;
   resize: vertical;
+}
+
+.identity-unit-compact .logline-input {
+  max-width: none;
+  margin-top: 10px;
+  font-size: 15px;
+  line-height: 1.7;
 }
 </style>

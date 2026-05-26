@@ -5,6 +5,7 @@ import type { CharacterQuickNote } from './types'
 
 defineProps<{
   notes: CharacterQuickNote[]
+  compact?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -22,16 +23,16 @@ function addNote() {
 </script>
 
 <template>
-  <CharacterDetailUnit title="快速记录" kicker="Notes">
+  <CharacterDetailUnit title="快速记录" kicker="Notes" :compact="compact">
     <textarea
       v-model="draft"
       class="quick-note-input"
       placeholder="快速记一笔……"
-      rows="3"
+      :rows="compact ? 2 : 3"
       @keydown.ctrl.enter.prevent="addNote"
     />
     <button class="add-note-button" type="button" @click="addNote">保存记录</button>
-    <div class="note-list">
+    <div class="note-list" :class="{ 'note-list-compact': compact }">
       <p v-for="note in notes" :key="note.id">{{ note.content }}</p>
     </div>
   </CharacterDetailUnit>
@@ -68,10 +69,19 @@ function addNote() {
   margin-top: 14px;
 }
 
+.note-list-compact {
+  gap: 8px;
+  margin-top: 12px;
+}
+
 .note-list p {
   margin: 0;
   border-left: 1px solid rgba(212, 212, 216, 0.46);
   color: #d4d4d8;
   padding-left: 12px;
+}
+
+.note-list-compact p {
+  padding-left: 10px;
 }
 </style>

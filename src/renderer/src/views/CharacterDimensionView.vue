@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import CharacterDimensionWheel, { type CharacterDimensionSlot } from '../components/character/CharacterDimensionWheel.vue'
+import PortableCharacterDetailPanel from '../components/character/detail/PortableCharacterDetailPanel.vue'
+import PortableCharacterDetailTrigger from '../components/character/detail/PortableCharacterDetailTrigger.vue'
 import { useCharacterStore } from '../stores/character'
 
 const characterStore = useCharacterStore()
 const selectedDimensionId = ref('')
+const detailPanelOpen = ref(false)
 
 const dimensionCharacters = computed(() => {
   return characterStore.characters.filter((character) =>
@@ -13,7 +16,9 @@ const dimensionCharacters = computed(() => {
 })
 
 const activeCharacter = computed(() => {
-  return characterStore.getCharacterById(characterStore.activeCharacterId) ?? dimensionCharacters.value[0]
+  const active = characterStore.getCharacterById(characterStore.activeCharacterId)
+  if (active && dimensionCharacters.value.some((character) => character.id === active.id)) return active
+  return dimensionCharacters.value[0]
 })
 
 const dimensions = computed(() => activeCharacter.value?.dimensions ?? [])
@@ -81,6 +86,10 @@ function invertDimension(dimensionId: string) {
   if (!activeCharacter.value) return
   characterStore.invertDimension(activeCharacter.value.id, dimensionId)
 }
+
+function openDetailPanel() {
+  detailPanelOpen.value = true
+}
 </script>
 
 <template>
@@ -100,7 +109,6 @@ function invertDimension(dimensionId: string) {
             </option>
           </select>
         </label>
-        <RouterLink class="detail-button" to="/character/list">人物详情</RouterLink>
       </div>
     </header>
 
@@ -218,11 +226,27 @@ function invertDimension(dimensionId: string) {
         </section>
       </aside>
     </main>
+
+    <PortableCharacterDetailTrigger
+      :character-name="activeCharacter?.profile.name"
+      @open="openDetailPanel"
+    />
+
+    <PortableCharacterDetailPanel
+      :open="detailPanelOpen"
+      :characters="characterStore.characters"
+      :initial-character-id="activeCharacter?.id"
+      select-initial-on-open
+      @close="detailPanelOpen = false"
+      @save="characterStore.saveCharacters"
+      @add-note="(characterId, content) => characterStore.addQuickNote(characterId, content)"
+    />
   </div>
 </template>
 
 <style scoped>
 .character-dimension-page {
+  position: relative;
   width: 100%;
   height: 100%;
   overflow: hidden;
@@ -289,7 +313,6 @@ function invertDimension(dimensionId: string) {
 }
 
 .back-button,
-.detail-button,
 .add-button,
 .ghost-button {
   border: 1px solid rgba(113, 113, 122, 0.82);
@@ -306,13 +329,11 @@ function invertDimension(dimensionId: string) {
 }
 
 .back-button,
-.detail-button,
 .add-button {
   padding: 10px 14px;
 }
 
 .back-button:hover,
-.detail-button:hover,
 .add-button:hover,
 .ghost-button:hover:not(:disabled) {
   border-color: rgba(228, 228, 231, 0.86);

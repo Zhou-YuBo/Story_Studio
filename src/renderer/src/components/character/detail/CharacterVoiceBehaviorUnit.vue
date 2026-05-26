@@ -4,6 +4,7 @@ import type { CharacterVoiceBehavior } from './types'
 
 defineProps<{
   voice: CharacterVoiceBehavior
+  compact?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -20,8 +21,8 @@ const voiceItems: Array<{ key: keyof CharacterVoiceBehavior; label: string }> = 
 </script>
 
 <template>
-  <CharacterDetailUnit title="语言与行为" kicker="Voice">
-    <div class="voice-list">
+  <CharacterDetailUnit title="语言与行为" kicker="Voice" :compact="compact">
+    <div class="voice-list" :class="{ 'voice-list-compact': compact }">
       <label v-for="item in voiceItems" :key="item.key" class="voice-row">
         <span>{{ item.label }}</span>
         <textarea v-model="voice[item.key]" rows="2" @blur="emit('save')" />
@@ -36,12 +37,22 @@ const voiceItems: Array<{ key: keyof CharacterVoiceBehavior; label: string }> = 
   gap: 11px;
 }
 
+.voice-list-compact {
+  gap: 9px;
+}
+
 .voice-row {
   display: grid;
   grid-template-columns: 80px minmax(0, 1fr);
   gap: 12px;
   border-bottom: 1px solid rgba(63, 63, 70, 0.7);
   padding-bottom: 11px;
+}
+
+.voice-list-compact .voice-row {
+  grid-template-columns: 1fr;
+  gap: 6px;
+  padding-bottom: 9px;
 }
 
 .voice-row:last-child {
@@ -64,5 +75,9 @@ const voiceItems: Array<{ key: keyof CharacterVoiceBehavior; label: string }> = 
   line-height: 1.8;
   outline: none;
   resize: vertical;
+}
+
+.voice-list-compact .voice-row textarea {
+  line-height: 1.65;
 }
 </style>

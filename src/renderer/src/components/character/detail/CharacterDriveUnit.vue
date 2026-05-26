@@ -4,6 +4,7 @@ import type { CharacterDrive } from './types'
 
 defineProps<{
   drive: CharacterDrive
+  compact?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -19,11 +20,11 @@ const driveItems: Array<{ key: keyof CharacterDrive; label: string }> = [
 </script>
 
 <template>
-  <CharacterDetailUnit title="驱动力" kicker="Drive">
-    <div class="drive-grid">
+  <CharacterDetailUnit title="驱动力" kicker="Drive" :compact="compact">
+    <div class="drive-grid" :class="{ 'drive-grid-compact': compact }">
       <label v-for="item in driveItems" :key="item.key" class="drive-item">
         <span>{{ item.label }}</span>
-        <textarea v-model="drive[item.key]" rows="3" @blur="emit('save')" />
+        <textarea v-model="drive[item.key]" :rows="compact ? 2 : 3" @blur="emit('save')" />
       </label>
     </div>
   </CharacterDetailUnit>
@@ -36,6 +37,11 @@ const driveItems: Array<{ key: keyof CharacterDrive; label: string }> = [
   gap: 12px;
 }
 
+.drive-grid-compact {
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
 .drive-item {
   display: grid;
   gap: 8px;
@@ -44,6 +50,12 @@ const driveItems: Array<{ key: keyof CharacterDrive; label: string }> = [
   border-radius: 16px;
   background: rgba(9, 9, 11, 0.28);
   padding: 14px;
+}
+
+.drive-grid-compact .drive-item {
+  min-height: 0;
+  border-radius: 14px;
+  padding: 12px;
 }
 
 .drive-item span {
@@ -61,5 +73,9 @@ const driveItems: Array<{ key: keyof CharacterDrive; label: string }> = [
   line-height: 1.8;
   outline: none;
   resize: vertical;
+}
+
+.drive-grid-compact .drive-item textarea {
+  line-height: 1.65;
 }
 </style>

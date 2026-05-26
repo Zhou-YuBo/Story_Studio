@@ -4,16 +4,21 @@ import type { CharacterDimensionSummaryItem } from './types'
 
 defineProps<{
   dimensions: CharacterDimensionSummaryItem[]
+  compact?: boolean
 }>()
 </script>
 
 <template>
-  <CharacterDetailUnit title="人物维度" kicker="Dimensions">
+  <CharacterDetailUnit title="人物维度" kicker="Dimensions" :compact="compact">
     <template #actions>
       <RouterLink class="unit-link" to="/character/dimensions">进入维度</RouterLink>
     </template>
 
-    <div v-if="dimensions.length" class="dimension-summary-list">
+    <div
+      v-if="dimensions.length"
+      class="dimension-summary-list"
+      :class="{ 'dimension-summary-list-compact': compact }"
+    >
       <div
         v-for="dimension in dimensions"
         :key="dimension.id"
@@ -44,6 +49,10 @@ defineProps<{
   gap: 10px;
 }
 
+.dimension-summary-list-compact {
+  gap: 8px;
+}
+
 .dimension-row {
   display: flex;
   align-items: center;
@@ -53,6 +62,13 @@ defineProps<{
   border-radius: 14px;
   background: rgba(9, 9, 11, 0.26);
   padding: 12px 13px;
+}
+
+.dimension-summary-list-compact .dimension-row {
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 11px;
 }
 
 .dimension-row-core {
@@ -70,6 +86,11 @@ defineProps<{
   font-size: 14px;
   font-weight: 500;
   text-align: right;
+}
+
+.dimension-summary-list-compact .dimension-row strong {
+  font-size: 13px;
+  text-align: left;
 }
 
 .empty-copy {

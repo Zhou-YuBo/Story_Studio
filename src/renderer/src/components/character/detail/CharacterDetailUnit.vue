@@ -37,8 +37,8 @@ defineProps<{
 }
 
 .detail-unit-compact {
-  padding: 16px;
   border-radius: 18px;
+  padding: 16px;
 }
 
 .unit-header {
@@ -49,12 +49,23 @@ defineProps<{
   margin-bottom: 16px;
 }
 
+.detail-unit-compact .unit-header {
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
 .unit-kicker {
   margin: 0 0 8px;
   color: #a1a1aa;
   font-size: 11px;
   letter-spacing: 0.22em;
   text-transform: uppercase;
+}
+
+.detail-unit-compact .unit-kicker {
+  margin-bottom: 5px;
+  font-size: 10px;
+  letter-spacing: 0.18em;
 }
 
 .unit-header h2 {
@@ -65,11 +76,21 @@ defineProps<{
   letter-spacing: 0.04em;
 }
 
+.detail-unit-compact .unit-header h2 {
+  font-size: 17px;
+}
+
 .unit-description {
   margin: 8px 0 0;
   color: #a1a1aa;
   font-size: 13px;
   line-height: 1.7;
+}
+
+.detail-unit-compact .unit-description {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.55;
 }
 
 .unit-actions {
@@ -80,5 +101,10 @@ defineProps<{
   color: #d4d4d8;
   font-size: 14px;
   line-height: 1.8;
+}
+
+.detail-unit-compact .unit-body {
+  font-size: 13px;
+  line-height: 1.65;
 }
 </style>
