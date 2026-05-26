@@ -3,6 +3,7 @@ import { createRouter, createWebHashHistory } from 'vue-router'
 import InspirationView from '../views/InspirationView.vue'
 import WorldView from '../views/WorldView.vue'
 import CharacterView from '../views/CharacterView.vue'
+import CharacterDimensionView from '../views/CharacterDimensionView.vue'
 import StructureView from '../views/StructureView.vue'
 import SceneView from '../views/SceneView.vue'
 import ReminderView from '../views/ReminderView.vue'
@@ -20,6 +21,10 @@ const routes = [
   {
     path: '/character',
     component: CharacterView
+  },
+  {
+    path: '/character/dimensions',
+    component: CharacterDimensionView
   },
   {
     path: '/structure',
