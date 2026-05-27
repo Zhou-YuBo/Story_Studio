@@ -9,12 +9,14 @@ import PortableCharacterDetailTrigger from '../components/character/detail/Porta
 import { useCharacterStore } from '../stores/character'
 import {
   CAST_UNIVERSE_CENTER,
+  type CastUniverseBoard,
   type CastUniversePlacedNode,
   type CastUniverseRing,
   useCharacterCastUniverseStore
 } from '../stores/characterCastUniverse'
 
 const CHARACTER_DRAG_TYPE = 'application/x-story-studio-character-id'
+const MAX_UNDO_STACK_SIZE = 50
 
 const characterStore = useCharacterStore()
 const castStore = useCharacterCastUniverseStore()
@@ -22,6 +24,7 @@ const castStore = useCharacterCastUniverseStore()
 const selectedNodeId = ref('')
 const detailPanelOpen = ref(false)
 const portableCharacterId = ref('')
+const pageRef = ref<HTMLElement | null>(null)
 const viewportRef = ref<HTMLElement | null>(null)
 const pan = ref({ x: 0, y: 0 })
 const zoom = ref(0.86)
@@ -32,6 +35,8 @@ const panStart = ref({ x: 0, y: 0 })
 const panOrigin = ref({ x: 0, y: 0 })
 const dragStart = ref({ x: 0, y: 0 })
 const dragOrigin = ref({ x: 0, y: 0 })
+const dragSnapshot = ref<CastUniverseBoard | null>(null)
+const undoStack = ref<CastUniverseBoard[]>([])
 
 const selectedNode = computed(() => {
   return castStore.board.placedNodes.find((node) => node.id === selectedNodeId.value)
@@ -64,6 +69,8 @@ const selectedRingValue = computed(() => {
   return selectedNode.value?.ring ? String(selectedNode.value.ring) : 'free'
 })
 
+const canUndo = computed(() => undoStack.value.length > 0)
+
 const selectedNodeLocation = computed(() => {
   if (!selectedNode.value) return '未选择实例'
   if (!selectedNode.value.systemId) return '自由位置'
@@ -84,6 +91,38 @@ watch(
   },
   { immediate: true }
 )
+
+function cloneBoardSnapshot(): CastUniverseBoard {
+  return JSON.parse(JSON.stringify(castStore.board)) as CastUniverseBoard
+}
+
+function pushBoardSnapshot(snapshot: CastUniverseBoard = cloneBoardSnapshot()): void {
+  undoStack.value.push(snapshot)
+  if (undoStack.value.length > MAX_UNDO_STACK_SIZE) undoStack.value.shift()
+}
+
+function undoBoardChange(): void {
+  const snapshot = undoStack.value.pop()
+  if (!snapshot) return
+
+  castStore.restoreBoard(snapshot)
+  if (
+    selectedNodeId.value &&
+    !castStore.board.placedNodes.some((node) => node.id === selectedNodeId.value)
+  ) {
+    selectedNodeId.value = ''
+  }
+}
+
+function hasNodeChanged(before: CastUniverseBoard, nodeId: string): boolean {
+  const beforeNode = before.placedNodes.find((node) => node.id === nodeId)
+  const afterNode = castStore.board.placedNodes.find((node) => node.id === nodeId)
+  return JSON.stringify(beforeNode) !== JSON.stringify(afterNode)
+}
+
+function isEditableTarget(target: EventTarget | null): boolean {
+  return target instanceof HTMLElement && Boolean(target.closest('input, textarea, select'))
+}
 
 function getCharacter(characterId: string): CharacterDetail | undefined {
   return characterStore.getCharacterById(characterId)
@@ -129,15 +168,24 @@ function screenToCanvasPoint(clientX: number, clientY: number): { x: number; y: 
 function dropCharacterOnCanvas(event: DragEvent): void {
   const characterId =
     event.dataTransfer?.getData(CHARACTER_DRAG_TYPE) || event.dataTransfer?.getData('text/plain')
-  if (!characterId || !characterStore.getCharacterById(characterId)) return
+  const character = characterId ? characterStore.getCharacterById(characterId) : undefined
+  if (!character) return
 
+  pushBoardSnapshot()
   const point = screenToCanvasPoint(event.clientX, event.clientY)
-  const node = castStore.addPlacedNode(characterId, point.x, point.y)
+  const node = castStore.addPlacedNode(character.id, point.x, point.y, {
+    expanded: character.dimensions.length > 0
+  })
   selectedNodeId.value = node.id
+}
+
+function focusPage(): void {
+  pageRef.value?.focus()
 }
 
 function selectNode(nodeId: string): void {
   selectedNodeId.value = nodeId
+  focusPage()
 }
 
 function startDragNode(node: CastUniversePlacedNode, event: PointerEvent): void {
@@ -148,6 +196,7 @@ function startDragNode(node: CastUniversePlacedNode, event: PointerEvent): void 
   dragPointerId.value = event.pointerId
   dragStart.value = { x: event.clientX, y: event.clientY }
   dragOrigin.value = { x: node.x, y: node.y }
+  dragSnapshot.value = cloneBoardSnapshot()
   selectedNodeId.value = node.id
   ;(event.currentTarget as HTMLElement).setPointerCapture(event.pointerId)
 }
@@ -165,9 +214,13 @@ function stopDragNode(event: PointerEvent): void {
   if (!draggingNodeId.value || event.pointerId !== dragPointerId.value) return
 
   event.stopPropagation()
-  castStore.settlePlacedNode(draggingNodeId.value)
+  const nodeId = draggingNodeId.value
+  const snapshot = dragSnapshot.value
+  castStore.settlePlacedNode(nodeId)
+  if (snapshot && hasNodeChanged(snapshot, nodeId)) pushBoardSnapshot(snapshot)
   draggingNodeId.value = ''
   dragPointerId.value = -1
+  dragSnapshot.value = null
   ;(event.currentTarget as HTMLElement).releasePointerCapture(event.pointerId)
 }
 
@@ -219,8 +272,9 @@ function fitCanvasView(): void {
 }
 
 function updateSelectedRing(value: string): void {
-  if (!selectedNode.value) return
+  if (!selectedNode.value || value === selectedRingValue.value) return
 
+  pushBoardSnapshot()
   if (value === 'free') {
     castStore.detachNode(selectedNode.value.id)
     return
@@ -231,18 +285,61 @@ function updateSelectedRing(value: string): void {
 }
 
 function updateSelectedKeyword(value: string): void {
-  if (!selectedNode.value) return
+  if (!selectedNode.value || value === selectedNode.value.keyword) return
+
+  pushBoardSnapshot()
   castStore.setNodeKeyword(selectedNode.value.id, value)
+}
+
+function toggleSelectedExpanded(): void {
+  if (!selectedNode.value) return
+
+  pushBoardSnapshot()
+  castStore.toggleNodeExpanded(selectedNode.value.id)
 }
 
 function setSelectedAsCenter(): void {
   if (!selectedNode.value) return
+
+  pushBoardSnapshot()
   castStore.setNodeAsCenter(selectedNode.value.id)
+}
+
+function detachSelectedNode(): void {
+  if (!selectedNode.value || !selectedNode.value.systemId) return
+
+  pushBoardSnapshot()
+  castStore.detachNode(selectedNode.value.id)
+}
+
+function deleteSelectedNode(): void {
+  if (!selectedNode.value) return
+
+  pushBoardSnapshot()
+  castStore.removePlacedNode(selectedNode.value.id)
+  selectedNodeId.value = ''
+}
+
+function handleKeyDown(event: KeyboardEvent): void {
+  if (isEditableTarget(event.target)) return
+
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z' && !event.shiftKey) {
+    event.preventDefault()
+    undoBoardChange()
+    return
+  }
+
+  if (event.key === 'Delete' || event.key === 'Backspace') {
+    if (!selectedNode.value) return
+
+    event.preventDefault()
+    deleteSelectedNode()
+  }
 }
 </script>
 
 <template>
-  <div class="cast-universe-page">
+  <div ref="pageRef" class="cast-universe-page" tabindex="0" @keydown="handleKeyDown">
     <header class="cast-header">
       <div>
         <p class="section-kicker">人物工作台 / 卡司宇宙</p>
@@ -291,6 +388,7 @@ function setSelectedAsCenter(): void {
           <button type="button" @click="zoomCanvas(-0.08)">缩小</button>
           <button type="button" @click="fitCanvasView">适配</button>
           <button type="button" @click="resetCanvasView">回中心</button>
+          <button type="button" :disabled="!canUndo" @click="undoBoardChange">撤回</button>
           <span>{{ Math.round(zoom * 100) }}%</span>
         </div>
         <p class="map-hint">从左侧拖入人物；空白处平移，滚轮缩放。</p>
@@ -379,22 +477,15 @@ function setSelectedAsCenter(): void {
           </label>
 
           <div class="editor-actions">
-            <button
-              class="ghost-button"
-              type="button"
-              @click="castStore.toggleNodeExpanded(selectedNode.id)"
-            >
+            <button class="ghost-button" type="button" @click="toggleSelectedExpanded">
               {{ selectedNode.expanded ? '收起维度圈' : '展开维度圈' }}
             </button>
             <button class="ghost-button" type="button" @click="setSelectedAsCenter">
               设为中心
             </button>
-            <button
-              class="ghost-button"
-              type="button"
-              @click="castStore.detachNode(selectedNode.id)"
-            >
-              移出吸附
+            <button class="ghost-button" type="button" @click="detachSelectedNode">移出吸附</button>
+            <button class="ghost-button danger-button" type="button" @click="deleteSelectedNode">
+              删除
             </button>
           </div>
         </template>
@@ -429,6 +520,7 @@ function setSelectedAsCenter(): void {
   flex-direction: column;
   background: radial-gradient(circle at 50% 44%, rgba(82, 82, 91, 0.2), transparent 36%), #09090b;
   color: #f4f4f5;
+  outline: none;
 }
 
 .cast-header {
@@ -576,6 +668,11 @@ function setSelectedAsCenter(): void {
   padding: 6px 10px;
 }
 
+.map-controls button:disabled {
+  cursor: not-allowed;
+  opacity: 0.38;
+}
+
 .map-controls span {
   min-width: 42px;
   color: #a1a1aa;
@@ -662,8 +759,13 @@ function setSelectedAsCenter(): void {
 }
 
 .editor-actions {
-  grid-template-columns: auto auto auto;
+  grid-template-columns: auto auto auto auto;
   align-items: end;
+}
+
+.danger-button {
+  border-color: rgba(248, 113, 113, 0.72);
+  color: #fecaca;
 }
 
 .cast-editor input,

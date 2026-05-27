@@ -31,6 +31,10 @@ export interface CastUniverseBoard {
   circleSystems: CastUniverseCircleSystem[]
 }
 
+interface AddPlacedNodeOptions {
+  expanded?: boolean
+}
+
 export const CAST_UNIVERSE_CANVAS_SIZE = 1400
 export const CAST_UNIVERSE_CENTER = CAST_UNIVERSE_CANVAS_SIZE / 2
 
@@ -191,14 +195,19 @@ export const useCharacterCastUniverseStore = defineStore('characterCastUniverse'
     saveBoard()
   }
 
-  function addPlacedNode(characterId: string, x: number, y: number): CastUniversePlacedNode {
+  function addPlacedNode(
+    characterId: string,
+    x: number,
+    y: number,
+    options: AddPlacedNodeOptions = {}
+  ): CastUniversePlacedNode {
     const node: CastUniversePlacedNode = {
       id: `cast-node-${nextNodeId++}`,
       characterId,
       x,
       y,
       keyword: '',
-      expanded: false
+      expanded: options.expanded ?? false
     }
 
     board.value.placedNodes.push(node)
@@ -237,6 +246,22 @@ export const useCharacterCastUniverseStore = defineStore('characterCastUniverse'
 
     node.systemId = undefined
     node.ring = undefined
+    saveBoard()
+  }
+
+  function removePlacedNode(nodeId: string): void {
+    board.value.placedNodes = board.value.placedNodes.filter((node) => node.id !== nodeId)
+
+    for (const system of board.value.circleSystems) {
+      system.centerNodeIds = system.centerNodeIds.filter((id) => id !== nodeId)
+    }
+
+    saveBoard()
+  }
+
+  function restoreBoard(snapshot: CastUniverseBoard): void {
+    board.value = normalizeBoard(snapshot)
+    restoreCounters(board.value)
     saveBoard()
   }
 
@@ -358,6 +383,8 @@ export const useCharacterCastUniverseStore = defineStore('characterCastUniverse'
     setNodeRing,
     setNodeAsCenter,
     detachNode,
+    removePlacedNode,
+    restoreBoard,
     setNodeKeyword,
     toggleNodeExpanded
   }
