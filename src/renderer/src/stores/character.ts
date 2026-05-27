@@ -1,12 +1,26 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { mockCharacters } from '../components/character/detail/mockCharacters'
-import type { CharacterDetail, CharacterDimensionSummaryItem, CharacterLayer } from '../components/character/detail/types'
+import type {
+  CharacterDetail,
+  CharacterDimensionSummaryItem,
+  CharacterInformationGap,
+  CharacterLayer,
+} from '../components/character/detail/types'
 
 const CHARACTERS_KEY = 'story-studio-characters'
 let nextCharacterId = 1
 let nextDimensionId = 1
 let nextNoteId = 1
+
+function createDefaultInformationGap(): CharacterInformationGap {
+  return {
+    knows: '',
+    hides: '',
+    misunderstands: '',
+    audienceKnows: '',
+  }
+}
 
 function cloneCharacters(characters: CharacterDetail[]): CharacterDetail[] {
   return JSON.parse(JSON.stringify(characters))
@@ -15,6 +29,10 @@ function cloneCharacters(characters: CharacterDetail[]): CharacterDetail[] {
 function normalizeCharacters(characters: CharacterDetail[]): CharacterDetail[] {
   return characters.map((character) => ({
     ...character,
+    informationGap: {
+      ...createDefaultInformationGap(),
+      ...(character.informationGap ?? {}),
+    },
     dimensions: character.dimensions.map((dimension, index) => ({
       ...dimension,
       note: dimension.note ?? '',
@@ -98,6 +116,7 @@ export const useCharacterStore = defineStore('character', () => {
         belief: '',
         doubt: '',
       },
+      informationGap: createDefaultInformationGap(),
       dimensions: [],
       voice: {
         speakingStyle: '',

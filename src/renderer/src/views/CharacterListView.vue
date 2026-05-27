@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import CharacterDimensionSummaryUnit from '../components/character/detail/CharacterDimensionSummaryUnit.vue'
 import CharacterDriveUnit from '../components/character/detail/CharacterDriveUnit.vue'
 import CharacterIdentityUnit from '../components/character/detail/CharacterIdentityUnit.vue'
+import CharacterInformationGapUnit from '../components/character/detail/CharacterInformationGapUnit.vue'
 import CharacterQuickNotesUnit from '../components/character/detail/CharacterQuickNotesUnit.vue'
 import CharacterTruthUnit from '../components/character/detail/CharacterTruthUnit.vue'
 import CharacterVoiceBehaviorUnit from '../components/character/detail/CharacterVoiceBehaviorUnit.vue'
@@ -71,6 +72,11 @@ function createCharacter() {
       <CharacterDriveUnit
         class="grid-span-6"
         :drive="selectedCharacter.drive"
+        @save="characterStore.saveCharacters"
+      />
+      <CharacterInformationGapUnit
+        class="grid-span-6"
+        :information-gap="selectedCharacter.informationGap"
         @save="characterStore.saveCharacters"
       />
       <CharacterDimensionSummaryUnit class="grid-span-6" :dimensions="selectedCharacter.dimensions" />

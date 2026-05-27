@@ -21,6 +21,13 @@ export interface CharacterDrive {
   doubt: string
 }
 
+export interface CharacterInformationGap {
+  knows: string
+  hides: string
+  misunderstands: string
+  audienceKnows: string
+}
+
 export interface CharacterDimensionSummaryItem {
   id: string
   positive: string
@@ -48,6 +55,7 @@ export interface CharacterDetail {
   profile: CharacterProfile
   truth: CharacterTruth
   drive: CharacterDrive
+  informationGap: CharacterInformationGap
   dimensions: CharacterDimensionSummaryItem[]
   voice: CharacterVoiceBehavior
   notes: CharacterQuickNote[]

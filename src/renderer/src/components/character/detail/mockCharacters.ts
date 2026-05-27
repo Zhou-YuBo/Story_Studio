@@ -21,6 +21,12 @@ export const mockCharacters: CharacterDetail[] = [
       belief: '所有链接都会在某个时间点断掉。',
       doubt: '也许有人留下不是因为还没看清他，而是真的愿意留下。',
     },
+    informationGap: {
+      knows: '知道自己害怕失去，但不知道这种恐惧已经变成伤害别人的方式。',
+      hides: '隐藏自己真正想被留下的需要，只展示理性和退路。',
+      misunderstands: '误以为对方的沉默就是离开前兆。',
+      audienceKnows: '观众能看到他每次切断关系前其实都在等待一句挽留。',
+    },
     dimensions: [
       { id: 'connection-loss', positive: '渴望连接', negative: '相信消失', note: '他越渴望关系稳定，越会提前为失去做准备。', core: true },
       { id: 'control-collapse', positive: '控制', negative: '失控', note: '他用计划和秩序抵抗情感里的不可控。' },
@@ -59,6 +65,12 @@ export const mockCharacters: CharacterDetail[] = [
       belief: '爱必须通过行动证明。',
       doubt: '也许被爱不需要先证明自己有用。',
     },
+    informationGap: {
+      knows: '知道林澈在逃避关系，但不愿承认自己也在用照顾逃避索取。',
+      hides: '隐藏自己的疲惫和嫉妒，尤其不愿说“我也想被照顾”。',
+      misunderstands: '误以为只要安排得足够周到，对方就会自然留下。',
+      audienceKnows: '观众能看到她的温柔里藏着强烈的控制欲和求救信号。',
+    },
     dimensions: [
       { id: 'care-need', positive: '照顾他人', negative: '承认需要', note: '她把被需要误认为被爱。', core: true },
       { id: 'warm-control', positive: '温暖', negative: '控制', note: '她的照顾有时会越过边界，变成对关系的控制。' },
@@ -94,6 +106,12 @@ export const mockCharacters: CharacterDetail[] = [
       fear: '干预太多会让别人重复他的错误。',
       belief: '选择必须自己做。',
       doubt: '沉默有时候也是一种逃避。',
+    },
+    informationGap: {
+      knows: '知道旧街上一些没人愿意提起的过往。',
+      hides: '隐藏自己曾经做错选择的细节。',
+      misunderstands: '以为年轻人只需要被点到为止。',
+      audienceKnows: '观众会逐渐意识到他每次嘴硬都在保护某个人。',
     },
     dimensions: [],
     voice: {

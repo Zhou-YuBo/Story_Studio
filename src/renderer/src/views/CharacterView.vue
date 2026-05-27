@@ -71,12 +71,12 @@ const overviewDimensionSlots: CharacterDimensionSlot[] = [
         </span>
       </button>
 
-      <button class="corner-entry corner-entry-right-bottom" type="button" aria-label="问询室">
+      <RouterLink class="corner-entry corner-entry-right-bottom" to="/character/inquiry" aria-label="问询室">
         <span class="entry-kicker">来，坐</span>
         <span class="entry-title">问询室</span>
         <span class="entry-copy">请人物进来，让他说话；等他出去后，再以作者视角翻看记录。</span>
         <span class="entry-quote">“我不是害怕失去，我只是早就知道它会发生。”</span>
-      </button>
+      </RouterLink>
     </div>
   </div>
 </template>
@@ -133,6 +133,7 @@ const overviewDimensionSlots: CharacterDimensionSlot[] = [
   color: inherit;
   font: inherit;
   text-align: left;
+  text-decoration: none;
   backdrop-filter: blur(18px);
   cursor: pointer;
   transition:

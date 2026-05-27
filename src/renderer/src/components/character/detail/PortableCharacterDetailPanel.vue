@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import CharacterDriveUnit from './CharacterDriveUnit.vue'
 import CharacterIdentityUnit from './CharacterIdentityUnit.vue'
+import CharacterInformationGapUnit from './CharacterInformationGapUnit.vue'
 import CharacterQuickNotesUnit from './CharacterQuickNotesUnit.vue'
 import CharacterTruthUnit from './CharacterTruthUnit.vue'
 import CharacterVoiceBehaviorUnit from './CharacterVoiceBehaviorUnit.vue'
@@ -94,6 +95,7 @@ watch(
         <CharacterIdentityUnit compact :profile="selectedCharacter.profile" @save="emit('save')" />
         <CharacterTruthUnit compact :truth="selectedCharacter.truth" @save="emit('save')" />
         <CharacterDriveUnit compact :drive="selectedCharacter.drive" @save="emit('save')" />
+        <CharacterInformationGapUnit compact :information-gap="selectedCharacter.informationGap" @save="emit('save')" />
         <CharacterVoiceBehaviorUnit compact :voice="selectedCharacter.voice" @save="emit('save')" />
         <CharacterQuickNotesUnit
           compact
