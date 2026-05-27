@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import PortableCharacterDetailPanel from '../components/character/detail/PortableCharacterDetailPanel.vue'
+import PortableCharacterDetailTrigger from '../components/character/detail/PortableCharacterDetailTrigger.vue'
 import type { CharacterDetail } from '../components/character/detail/types'
 import { useCharacterStore } from '../stores/character'
 import {
@@ -14,6 +16,8 @@ const relationshipStore = useCharacterRelationshipStore()
 const characterAId = ref('')
 const characterBId = ref('')
 const activeNodeId = ref('')
+const detailPanelOpen = ref(false)
+const portableCharacterId = ref('')
 const draggingNodeId = ref('')
 const curveBoardRef = ref<HTMLElement | null>(null)
 
@@ -23,6 +27,11 @@ const curveXAxisLabelY = 92
 
 const characterA = computed(() => characterStore.getCharacterById(characterAId.value))
 const characterB = computed(() => characterStore.getCharacterById(characterBId.value))
+const portableCharacterName = computed(() => {
+  const character =
+    characterStore.getCharacterById(portableCharacterId.value) ?? characterStore.characters[0]
+  return character?.profile.name || '未命名人物'
+})
 const relationship = computed(() => relationshipStore.ensureRelationship(characterAId.value, characterBId.value))
 
 const selfFields: Array<{ key: keyof RelationshipSelf; label: string }> = [
@@ -239,7 +248,14 @@ function saveRelationship(): void {
           </select>
         </label>
       </section>
-      <RouterLink class="back-button" to="/character">返回首页</RouterLink>
+      <div class="header-side-actions">
+        <RouterLink class="back-button" to="/character">返回首页</RouterLink>
+        <PortableCharacterDetailTrigger
+          class="relationship-detail-trigger"
+          :character-name="portableCharacterName"
+          @open="detailPanelOpen = true"
+        />
+      </div>
     </header>
 
     <main v-if="relationship && characterA && characterB" class="relationship-workbench">
@@ -344,7 +360,7 @@ function saveRelationship(): void {
               />
             </label>
             <label>
-              <span>亲疏程度 {{ activeNode.closeness }}</span>
+              <span>亲疏程度</span>
               <input
                 v-model.number="activeNode.closeness"
                 type="range"
@@ -415,6 +431,15 @@ function saveRelationship(): void {
     <main v-else class="empty-state">
       <p>至少需要两个角色，才能建立二人关系。</p>
     </main>
+
+    <PortableCharacterDetailPanel
+      :open="detailPanelOpen"
+      :characters="characterStore.characters"
+      @close="detailPanelOpen = false"
+      @save="characterStore.saveCharacters"
+      @select-character="(characterId) => (portableCharacterId = characterId)"
+      @add-note="(characterId, content) => characterStore.addQuickNote(characterId, content)"
+    />
   </div>
 </template>
 
@@ -481,6 +506,29 @@ function saveRelationship(): void {
 .back-button,
 .ghost-button {
   padding: 8px 11px;
+}
+
+.header-side-actions {
+  position: relative;
+  align-self: stretch;
+  display: grid;
+  align-content: start;
+  justify-items: end;
+  gap: 8px;
+}
+
+.header-side-actions :deep(.relationship-detail-trigger) {
+  position: static;
+  width: 118px;
+  border-right: 1px solid rgba(113, 113, 122, 0.82);
+  border-radius: 14px;
+  padding: 9px 11px;
+  transform: translateX(76px);
+}
+
+.header-side-actions :deep(.relationship-detail-trigger:hover),
+.header-side-actions :deep(.relationship-detail-trigger:focus-visible) {
+  transform: translateX(0);
 }
 
 .text-button {

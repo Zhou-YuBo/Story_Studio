@@ -21,6 +21,7 @@ const emit = defineEmits<{
   close: []
   save: []
   addNote: [characterId: string, content: string]
+  selectCharacter: [characterId: string]
 }>()
 
 const selectedCharacterId = ref('')
@@ -52,6 +53,7 @@ watch(
 
 watch(selectedCharacterId, (characterId) => {
   lastSelectedCharacterId = characterId
+  emit('selectCharacter', characterId)
 })
 
 watch(
