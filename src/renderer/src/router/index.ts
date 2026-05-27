@@ -6,6 +6,7 @@ import CharacterView from '../views/CharacterView.vue'
 import CharacterDimensionView from '../views/CharacterDimensionView.vue'
 import CharacterInquiryView from '../views/CharacterInquiryView.vue'
 import CharacterRelationshipView from '../views/CharacterRelationshipView.vue'
+import CharacterCastUniverseView from '../views/CharacterCastUniverseView.vue'
 import CharacterListView from '../views/CharacterListView.vue'
 import StructureView from '../views/StructureView.vue'
 import SceneView from '../views/SceneView.vue'
@@ -40,6 +41,10 @@ const routes = [
   {
     path: '/character/relationships',
     component: CharacterRelationshipView
+  },
+  {
+    path: '/character/cast-universe',
+    component: CharacterCastUniverseView
   },
   {
     path: '/structure',

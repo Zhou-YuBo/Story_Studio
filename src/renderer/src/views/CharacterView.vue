@@ -58,10 +58,10 @@ const overviewDimensionSlots: CharacterDimensionSlot[] = [
         <span class="wheel-caption wheel-caption-bottom">点击进入维度设计</span>
       </RouterLink>
 
-      <button class="corner-entry corner-entry-left-bottom" type="button" aria-label="卡司宇宙">
+      <RouterLink class="corner-entry corner-entry-left-bottom" to="/character/cast-universe" aria-label="卡司宇宙">
         <span class="entry-kicker">群像对照</span>
         <span class="entry-title">卡司宇宙</span>
-        <span class="entry-copy">以主角为中心摆放次要人物，观察他们如何照亮或挑战主角。</span>
+        <span class="entry-copy">围绕中心人物编排多层卡司，观察他们如何照亮或挑战彼此。</span>
         <span class="orbit-preview">
           <span class="orbit orbit-a"></span>
           <span class="orbit orbit-b"></span>
@@ -69,7 +69,7 @@ const overviewDimensionSlots: CharacterDimensionSlot[] = [
           <span class="orbit-dot dot-b"></span>
           <span class="orbit-dot dot-c"></span>
         </span>
-      </button>
+      </RouterLink>
 
       <RouterLink class="corner-entry corner-entry-right-bottom" to="/character/inquiry" aria-label="问询室">
         <span class="entry-kicker">来，坐</span>
