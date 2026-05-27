@@ -37,7 +37,7 @@ defineProps<{
   border-radius: 50%;
   background: radial-gradient(circle, rgba(39, 39, 42, 0.72), rgba(9, 9, 11, 0.7) 66%);
   color: #f4f4f5;
-  cursor: pointer;
+  cursor: inherit;
   font: inherit;
   padding: 0;
 }

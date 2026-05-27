@@ -9,7 +9,11 @@ defineProps<{
 </script>
 
 <template>
-  <button class="cast-person-node" :class="{ 'cast-person-node-active': active, 'cast-person-node-expanded': expanded }" type="button">
+  <button
+    class="cast-person-node"
+    :class="{ 'cast-person-node-active': active, 'cast-person-node-expanded': expanded }"
+    type="button"
+  >
     <strong>{{ name || '未命名人物' }}</strong>
     <span>{{ keyword || layer || '关键词' }}</span>
   </button>
@@ -25,7 +29,7 @@ defineProps<{
   border-radius: 999px;
   background: rgba(9, 9, 11, 0.82);
   color: #f4f4f5;
-  cursor: pointer;
+  cursor: inherit;
   font: inherit;
   padding: 9px 14px;
   text-align: center;
