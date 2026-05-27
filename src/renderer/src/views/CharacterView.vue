@@ -33,16 +33,16 @@ const overviewDimensionSlots: CharacterDimensionSlot[] = [
         </span>
       </RouterLink>
 
-      <button class="corner-entry corner-entry-right-top" type="button" aria-label="二人关系">
+      <RouterLink class="corner-entry corner-entry-right-top" to="/character/relationships" aria-label="二人关系">
         <span class="entry-kicker">关系中的自我</span>
         <span class="entry-title">二人关系</span>
-        <span class="entry-copy">查看两个人之间的社会关系、情感关系与隐喻关系。</span>
+        <span class="entry-copy">查看二人的亲疏变化、关系定义，以及彼此面前的定制自我。</span>
         <span class="relationship-preview">
           <span>林澈</span>
           <i></i>
           <span>周以安</span>
         </span>
-      </button>
+      </RouterLink>
 
       <RouterLink
         class="dimension-wheel-button"

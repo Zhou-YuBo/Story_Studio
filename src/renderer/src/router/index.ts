@@ -5,6 +5,7 @@ import WorldView from '../views/WorldView.vue'
 import CharacterView from '../views/CharacterView.vue'
 import CharacterDimensionView from '../views/CharacterDimensionView.vue'
 import CharacterInquiryView from '../views/CharacterInquiryView.vue'
+import CharacterRelationshipView from '../views/CharacterRelationshipView.vue'
 import CharacterListView from '../views/CharacterListView.vue'
 import StructureView from '../views/StructureView.vue'
 import SceneView from '../views/SceneView.vue'
@@ -35,6 +36,10 @@ const routes = [
   {
     path: '/character/inquiry',
     component: CharacterInquiryView
+  },
+  {
+    path: '/character/relationships',
+    component: CharacterRelationshipView
   },
   {
     path: '/structure',
