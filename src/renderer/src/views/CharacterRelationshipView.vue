@@ -14,6 +14,12 @@ const relationshipStore = useCharacterRelationshipStore()
 const characterAId = ref('')
 const characterBId = ref('')
 const activeNodeId = ref('')
+const draggingNodeId = ref('')
+const curveBoardRef = ref<HTMLElement | null>(null)
+
+const curveYAxisTop = 12
+const curveXAxisY = 82
+const curveXAxisLabelY = 92
 
 const characterA = computed(() => characterStore.getCharacterById(characterAId.value))
 const characterB = computed(() => characterStore.getCharacterById(characterBId.value))
@@ -33,27 +39,41 @@ const selfFields: Array<{ key: keyof RelationshipSelf; label: string }> = [
 
 const definitionFields: Array<{ key: keyof CharacterRelationship['definitions']; label: string; placeholder: string }> = [
   { key: 'surface', label: '表层关系', placeholder: '观众一眼能看出的关系。' },
-  { key: 'actual', label: '实际/情感关系', placeholder: '表层之下真正的关系。' },
+  { key: 'actual', label: '实际关系', placeholder: '表层之下真正的关系。' },
   { key: 'social', label: '社会关系', placeholder: '可与表层关系重叠。' },
   { key: 'symbolic', label: '象征关系', placeholder: '不一定要设置。' }
 ]
 
 const curvePoints = computed(() => {
-  const nodes = relationship.value?.changeNodes ?? []
+  const nodes = sortedChangeNodes.value
   if (!nodes.length) return ''
 
   return nodes
-    .map((node, index) => {
-      const x = getCurvePointX(index, nodes.length)
+    .map((node) => {
+      const x = getCurvePointX(node.timelinePosition)
       const y = getCurvePointY(node.closeness)
       return `${x},${y}`
     })
     .join(' ')
 })
 
+const sortedChangeNodes = computed(() => {
+  return [...(relationship.value?.changeNodes ?? [])].sort(
+    (nodeA, nodeB) => nodeA.timelinePosition - nodeB.timelinePosition
+  )
+})
+
 const activeNode = computed(() => {
-  const nodes = relationship.value?.changeNodes ?? []
+  const nodes = sortedChangeNodes.value
   return nodes.find((node) => node.id === activeNodeId.value) ?? nodes[0]
+})
+
+const actSegments = computed(() => {
+  return [
+    { id: 'act-1', label: '第一幕', left: 8, width: 28 },
+    { id: 'act-2', label: '第二幕', left: 36, width: 34 },
+    { id: 'act-3', label: '第三幕', left: 70, width: 22 }
+  ]
 })
 
 function normalizeSelectedCharacters(): void {
@@ -95,18 +115,72 @@ watch(
   { immediate: true }
 )
 
-function getCurvePointX(index: number, total: number): number {
-  return total === 1 ? 50 : 8 + (index / (total - 1)) * 84
+function getCurvePointX(timelinePosition: number): number {
+  return Math.max(4, Math.min(96, timelinePosition))
 }
 
 function getCurvePointY(closeness: number): number {
-  return 92 - closeness * 0.84
+  return curveXAxisY - (Math.max(0, Math.min(100, closeness)) / 100) * (curveXAxisY - curveYAxisTop)
 }
 
 function addChangeNode(relationshipId: string): void {
-  relationshipStore.addChangeNode(relationshipId)
-  const nodes = relationship.value?.changeNodes ?? []
-  activeNodeId.value = nodes[nodes.length - 1]?.id ?? activeNodeId.value
+  const node = relationshipStore.addChangeNode(relationshipId, activeNode.value?.id)
+  activeNodeId.value = node?.id ?? activeNodeId.value
+}
+
+function getNodeLabelSide(index: number): 'top' | 'bottom' {
+  const previousNode = sortedChangeNodes.value[index - 1]
+  const nextNode = sortedChangeNodes.value[index + 1]
+  const node = sortedChangeNodes.value[index]
+
+  if (!node) return 'top'
+
+  const neighborCloseness = [previousNode?.closeness, nextNode?.closeness].filter(
+    (closeness): closeness is number => typeof closeness === 'number'
+  )
+  const neighborAverage = neighborCloseness.length
+    ? neighborCloseness.reduce((sum, closeness) => sum + closeness, 0) / neighborCloseness.length
+    : node.closeness
+
+  return node.closeness >= neighborAverage ? 'bottom' : 'top'
+}
+
+function startDragNode(nodeId: string, event: PointerEvent): void {
+  activeNodeId.value = nodeId
+  draggingNodeId.value = nodeId
+  ;(event.currentTarget as HTMLElement).setPointerCapture(event.pointerId)
+  updateDraggedNode(event)
+}
+
+function dragNode(event: PointerEvent): void {
+  if (!draggingNodeId.value) return
+  updateDraggedNode(event)
+}
+
+function stopDragNode(event: PointerEvent): void {
+  if (!draggingNodeId.value) return
+  ;(event.currentTarget as HTMLElement).releasePointerCapture(event.pointerId)
+  draggingNodeId.value = ''
+  saveRelationship()
+}
+
+function updateDraggedNode(event: PointerEvent): void {
+  const targetRelationship = relationship.value
+  const board = curveBoardRef.value
+  if (!targetRelationship || !board) return
+
+  const node = targetRelationship.changeNodes.find((item) => item.id === draggingNodeId.value)
+  if (!node) return
+
+  const rect = board.getBoundingClientRect()
+  const timelinePosition = ((event.clientX - rect.left) / rect.width) * 100
+  const closeness = 100 - ((event.clientY - rect.top) / rect.height) * 100
+
+  node.timelinePosition = Math.max(4, Math.min(96, timelinePosition))
+  node.closeness = Math.round(Math.max(0, Math.min(100, closeness)))
+  targetRelationship.changeNodes.sort(
+    (nodeA, nodeB) => nodeA.timelinePosition - nodeB.timelinePosition
+  )
 }
 
 function removeActiveNode(relationshipId: string): void {
@@ -197,25 +271,66 @@ function saveRelationship(): void {
             </button>
           </div>
 
-          <div class="curve-board">
+          <div ref="curveBoardRef" class="curve-board">
             <span class="curve-label curve-label-top">亲近</span>
             <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
               <polyline :points="curvePoints" />
+              <line x1="4" :y1="curveXAxisY" x2="96" :y2="curveXAxisY" class="curve-axis-line" />
+              <g v-for="node in sortedChangeNodes" :key="`${node.id}-guide`">
+                <line
+                  :x1="getCurvePointX(node.timelinePosition)"
+                  :y1="getCurvePointY(node.closeness)"
+                  :x2="getCurvePointX(node.timelinePosition)"
+                  :y2="curveXAxisY"
+                  class="curve-guide-line"
+                />
+              </g>
             </svg>
-            <button
-              v-for="(node, index) in relationship.changeNodes"
-              :key="node.id"
-              class="curve-node-tag"
-              :class="{ 'curve-node-tag-active': node.id === activeNode?.id }"
-              :style="{
-                left: `${getCurvePointX(index, relationship.changeNodes.length)}%`,
-                top: `${getCurvePointY(node.closeness)}%`
-              }"
-              type="button"
-              @click="activeNodeId = node.id"
-            >
-              {{ node.structurePosition || `节点 ${index + 1}` }}
-            </button>
+
+            <template v-for="(node, index) in sortedChangeNodes" :key="node.id">
+              <span
+                class="curve-node-label"
+                :class="`curve-node-label-${getNodeLabelSide(index)}`"
+                :style="{
+                  left: `${getCurvePointX(node.timelinePosition)}%`,
+                  top: `${getCurvePointY(node.closeness)}%`
+                }"
+              >
+                {{ node.turningPoint || '关系变化' }}
+              </span>
+              <button
+                class="curve-node-dot"
+                :class="{ 'curve-node-dot-active': node.id === activeNode?.id }"
+                :style="{
+                  left: `${getCurvePointX(node.timelinePosition)}%`,
+                  top: `${getCurvePointY(node.closeness)}%`
+                }"
+                type="button"
+                @pointerdown="startDragNode(node.id, $event)"
+                @pointermove="dragNode"
+                @pointerup="stopDragNode"
+                @pointercancel="stopDragNode"
+              />
+              <span
+                class="curve-node-axis-label"
+                :style="{
+                  left: `${getCurvePointX(node.timelinePosition)}%`,
+                  top: `${curveXAxisLabelY}%`
+                }"
+              >
+                {{ node.structurePosition || `节点 ${index + 1}` }}
+              </span>
+            </template>
+
+            <div class="act-bar" :style="{ top: `${curveXAxisLabelY + 5}%` }">
+              <span
+                v-for="segment in actSegments"
+                :key="segment.id"
+                :style="{ left: `${segment.left}%`, width: `${segment.width}%` }"
+              >
+                {{ segment.label }}
+              </span>
+            </div>
             <span class="curve-label curve-label-bottom">疏远</span>
           </div>
 
@@ -524,6 +639,8 @@ function saveRelationship(): void {
   background-size: 100% 25%, 20% 100%;
   overflow: hidden;
   padding: 10px;
+  touch-action: none;
+  user-select: none;
 }
 
 .curve-board svg {
@@ -542,6 +659,17 @@ function saveRelationship(): void {
   stroke-width: 1.2;
 }
 
+.curve-axis-line {
+  stroke: rgba(161, 161, 170, 0.62);
+  stroke-width: 0.7;
+}
+
+.curve-guide-line {
+  stroke: rgba(161, 161, 170, 0.46);
+  stroke-dasharray: 2 2;
+  stroke-width: 0.5;
+}
+
 .curve-label {
   position: absolute;
   left: 10px;
@@ -558,28 +686,77 @@ function saveRelationship(): void {
   bottom: 8px;
 }
 
-.curve-node-tag {
+.curve-node-label,
+.curve-node-axis-label {
   position: absolute;
-  z-index: 3;
-  max-width: 104px;
+  z-index: 4;
+  max-width: 108px;
   overflow: hidden;
-  border: 1px solid rgba(113, 113, 122, 0.78);
-  border-radius: 999px;
-  background: rgba(24, 24, 27, 0.92);
   color: #d4d4d8;
-  cursor: pointer;
-  font: inherit;
-  font-size: 11px;
-  padding: 5px 8px;
+  font-size: 10px;
+  line-height: 1.25;
+  pointer-events: none;
   text-overflow: ellipsis;
-  transform: translate(-50%, -50%);
+  transform: translateX(-50%);
   white-space: nowrap;
 }
 
-.curve-node-tag-active {
-  border-color: rgba(244, 244, 245, 0.82);
-  background: rgba(82, 82, 91, 0.92);
-  color: #fafafa;
+.curve-node-label-top {
+  transform: translate(-50%, calc(-100% - 8px));
+}
+
+.curve-node-label-bottom {
+  transform: translate(-50%, 9px);
+}
+
+.curve-node-axis-label {
+  color: #a1a1aa;
+  transform: translate(-50%, 0);
+}
+
+.curve-node-dot {
+  position: absolute;
+  z-index: 5;
+  width: 11px;
+  height: 11px;
+  border: 1px solid rgba(244, 244, 245, 0.86);
+  border-radius: 999px;
+  background: #09090b;
+  cursor: grab;
+  padding: 0;
+  transform: translate(-50%, -50%);
+}
+
+.curve-node-dot:active {
+  cursor: grabbing;
+}
+
+.curve-node-dot-active {
+  width: 14px;
+  height: 14px;
+  background: #f4f4f5;
+  box-shadow: 0 0 0 4px rgba(244, 244, 245, 0.12);
+}
+
+.act-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 2;
+  height: 20px;
+}
+
+.act-bar span {
+  position: absolute;
+  top: 0;
+  display: grid;
+  place-items: end center;
+  height: 18px;
+  border-top: 1px solid rgba(161, 161, 170, 0.56);
+  border-right: 1px solid rgba(161, 161, 170, 0.56);
+  border-left: 1px solid rgba(161, 161, 170, 0.56);
+  color: #71717a;
+  font-size: 10px;
 }
 
 .active-node-editor {
