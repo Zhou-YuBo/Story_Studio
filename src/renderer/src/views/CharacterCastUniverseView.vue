@@ -22,6 +22,7 @@ const characterStore = useCharacterStore()
 const castStore = useCharacterCastUniverseStore()
 
 const selectedNodeId = ref('')
+const snapWarning = ref('')
 const detailPanelOpen = ref(false)
 const portableCharacterId = ref('')
 const pageRef = ref<HTMLElement | null>(null)
@@ -105,6 +106,7 @@ function undoBoardChange(): void {
   const snapshot = undoStack.value.pop()
   if (!snapshot) return
 
+  snapWarning.value = ''
   castStore.restoreBoard(snapshot)
   if (
     selectedNodeId.value &&
@@ -172,15 +174,22 @@ function dropCharacterOnCanvas(event: DragEvent): void {
   if (!character) return
 
   pushBoardSnapshot()
+  snapWarning.value = ''
   const point = screenToCanvasPoint(event.clientX, event.clientY)
   const node = castStore.addPlacedNode(character.id, point.x, point.y, {
     expanded: character.dimensions.length > 0
   })
+  const settleResult = castStore.settlePlacedNode(node.id)
+  if (settleResult === 'duplicate') showDuplicateWarning()
   selectedNodeId.value = node.id
 }
 
 function focusPage(): void {
   pageRef.value?.focus()
+}
+
+function showDuplicateWarning(): void {
+  snapWarning.value = '同一个人物在当前同心圆里只能出现一次。'
 }
 
 function selectNode(nodeId: string): void {
@@ -216,8 +225,14 @@ function stopDragNode(event: PointerEvent): void {
   event.stopPropagation()
   const nodeId = draggingNodeId.value
   const snapshot = dragSnapshot.value
-  castStore.settlePlacedNode(nodeId)
-  if (snapshot && hasNodeChanged(snapshot, nodeId)) pushBoardSnapshot(snapshot)
+  const settleResult = castStore.settlePlacedNode(nodeId)
+  if (settleResult === 'duplicate') {
+    if (snapshot) castStore.restoreBoard(snapshot)
+    showDuplicateWarning()
+  } else {
+    snapWarning.value = ''
+    if (snapshot && hasNodeChanged(snapshot, nodeId)) pushBoardSnapshot(snapshot)
+  }
   draggingNodeId.value = ''
   dragPointerId.value = -1
   dragSnapshot.value = null
@@ -274,14 +289,20 @@ function fitCanvasView(): void {
 function updateSelectedRing(value: string): void {
   if (!selectedNode.value || value === selectedRingValue.value) return
 
-  pushBoardSnapshot()
+  const snapshot = cloneBoardSnapshot()
+  pushBoardSnapshot(snapshot)
+  snapWarning.value = ''
   if (value === 'free') {
     castStore.detachNode(selectedNode.value.id)
     return
   }
 
   const ring = Number(value) as CastUniverseRing
-  castStore.setNodeRing(selectedNode.value.id, castStore.board.activeSystemId, ring)
+  if (!castStore.setNodeRing(selectedNode.value.id, castStore.board.activeSystemId, ring)) {
+    undoStack.value.pop()
+    castStore.restoreBoard(snapshot)
+    showDuplicateWarning()
+  }
 }
 
 function updateSelectedKeyword(value: string): void {
@@ -301,8 +322,14 @@ function toggleSelectedExpanded(): void {
 function setSelectedAsCenter(): void {
   if (!selectedNode.value) return
 
-  pushBoardSnapshot()
-  castStore.setNodeAsCenter(selectedNode.value.id)
+  const snapshot = cloneBoardSnapshot()
+  pushBoardSnapshot(snapshot)
+  snapWarning.value = ''
+  if (!castStore.setNodeAsCenter(selectedNode.value.id)) {
+    undoStack.value.pop()
+    castStore.restoreBoard(snapshot)
+    showDuplicateWarning()
+  }
 }
 
 function detachSelectedNode(): void {
@@ -392,6 +419,7 @@ function handleKeyDown(event: KeyboardEvent): void {
           <span>{{ Math.round(zoom * 100) }}%</span>
         </div>
         <p class="map-hint">从左侧拖入人物；空白处平移，滚轮缩放。</p>
+        <p v-if="snapWarning" class="snap-warning">{{ snapWarning }}</p>
 
         <div class="cast-canvas" :style="{ transform: canvasTransform }">
           <div
@@ -688,6 +716,20 @@ function handleKeyDown(event: KeyboardEvent): void {
   margin: 0;
   color: #71717a;
   font-size: 12px;
+}
+
+.snap-warning {
+  position: absolute;
+  z-index: 20;
+  left: 32px;
+  top: 96px;
+  margin: 0;
+  border: 1px solid rgba(251, 191, 36, 0.42);
+  border-radius: 999px;
+  background: rgba(120, 53, 15, 0.44);
+  color: #fde68a;
+  font-size: 12px;
+  padding: 7px 10px;
 }
 
 .circle-system {

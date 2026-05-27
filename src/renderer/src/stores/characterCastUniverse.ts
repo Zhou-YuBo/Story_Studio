@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 
 export type CastUniverseRing = 1 | 2 | 3
+export type CastUniverseSettleResult = 'snapped' | 'free' | 'duplicate'
 
 export interface CastUniversePlacedNode {
   id: string
@@ -110,11 +111,27 @@ function normalizeBoard(board: CastUniverseBoard): CastUniverseBoard {
         systemId: node.systemId && availableSystemIds.has(node.systemId) ? node.systemId : undefined
       }))
     : []
+  const seenSystemCharacters = new Set<string>()
+
+  for (const node of placedNodes) {
+    if (!node.systemId) continue
+
+    const systemCharacterKey = `${node.systemId}:${node.characterId}`
+    if (seenSystemCharacters.has(systemCharacterKey)) {
+      node.systemId = undefined
+      node.ring = undefined
+      continue
+    }
+
+    seenSystemCharacters.add(systemCharacterKey)
+  }
+
   const availableNodeIds = new Set(placedNodes.map((node) => node.id))
+  const nodeSystemIds = new Map(placedNodes.map((node) => [node.id, node.systemId]))
 
   for (const system of circleSystems) {
     system.centerNodeIds = system.centerNodeIds
-      .filter((nodeId) => availableNodeIds.has(nodeId))
+      .filter((nodeId) => availableNodeIds.has(nodeId) && nodeSystemIds.get(nodeId) === system.id)
       .slice(0, 3)
   }
 
@@ -286,9 +303,9 @@ export const useCharacterCastUniverseStore = defineStore('characterCastUniverse'
     return true
   }
 
-  function settlePlacedNode(nodeId: string): boolean {
+  function settlePlacedNode(nodeId: string): CastUniverseSettleResult {
     const node = getNodeById(nodeId)
-    if (!node) return false
+    if (!node) return 'free'
 
     let nearestSystem: CastUniverseCircleSystem | undefined
     let nearestRing: CastUniverseRing | undefined
@@ -310,12 +327,12 @@ export const useCharacterCastUniverseStore = defineStore('characterCastUniverse'
 
     if (!nearestSystem || !nearestRing || nearestDistance > SNAP_THRESHOLD) {
       detachNode(node.id)
-      return false
+      return 'free'
     }
 
     if (hasCharacterInSystem(node.characterId, nearestSystem.id, node.id)) {
       detachNode(node.id)
-      return false
+      return 'duplicate'
     }
 
     for (const system of board.value.circleSystems) {
@@ -331,7 +348,7 @@ export const useCharacterCastUniverseStore = defineStore('characterCastUniverse'
     if (nearestRing !== 1) node.expanded = false
     board.value.activeSystemId = nearestSystem.id
     saveBoard()
-    return true
+    return 'snapped'
   }
 
   function setNodeRing(nodeId: string, systemId: string, ring: CastUniverseRing): boolean {
