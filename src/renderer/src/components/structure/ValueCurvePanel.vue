@@ -22,7 +22,7 @@ const props = defineProps<{
 
 const AXIS_SLOT_COUNT = 14
 const CHART_WIDTH = 720
-const CHART_LEFT = 56
+const CHART_LEFT = 142
 const CHART_RIGHT = 32
 const CHART_TOP = 34
 const CHART_HEIGHT = 168
@@ -80,6 +80,9 @@ const curveSeries = computed(() =>
     return { axis, path, points }
   }),
 )
+
+const legendSeries = computed(() => curveSeries.value.slice(0, 6))
+const hiddenLegendCount = computed(() => Math.max(0, curveSeries.value.length - legendSeries.value.length))
 
 const chartEmptyText = computed(() => {
   if (props.targets.length === 0) return `当前${props.horizontalUnitLabel}层尚未接入曲线横轴`
@@ -246,11 +249,30 @@ onBeforeUnmount(stopPointDrag)
         role="img"
         aria-label="价值曲线"
       >
-        <line x1="56" y1="34" x2="56" y2="202" class="axis-line" />
-        <line x1="56" y1="202" x2="688" y2="202" class="axis-line" />
-        <line x1="56" y1="118" x2="688" y2="118" class="center-line" />
-        <line x1="56" y1="62" x2="688" y2="62" class="grid-line" />
-        <line x1="56" y1="174" x2="688" y2="174" class="grid-line" />
+        <g class="chart-legend">
+          <g v-for="(series, index) in legendSeries" :key="series.axis.id">
+            <line
+              x1="18"
+              :y1="CHART_TOP + 16 + index * 18"
+              x2="38"
+              :y2="CHART_TOP + 16 + index * 18"
+              :stroke="series.axis.color"
+              class="legend-line"
+            />
+            <text x="46" :y="CHART_TOP + 20 + index * 18" class="legend-text">
+              {{ axisLabel(series.axis) }}
+            </text>
+          </g>
+          <text v-if="hiddenLegendCount > 0" x="46" :y="CHART_TOP + 20 + legendSeries.length * 18" class="legend-more">
+            +{{ hiddenLegendCount }}
+          </text>
+        </g>
+
+        <line :x1="CHART_LEFT" y1="34" :x2="CHART_LEFT" y2="202" class="axis-line" />
+        <line :x1="CHART_LEFT" y1="202" x2="688" y2="202" class="axis-line" />
+        <line :x1="CHART_LEFT" y1="118" x2="688" y2="118" class="center-line" />
+        <line :x1="CHART_LEFT" y1="62" x2="688" y2="62" class="grid-line" />
+        <line :x1="CHART_LEFT" y1="174" x2="688" y2="174" class="grid-line" />
 
         <g v-for="tick in tickPositions" :key="tick.id">
           <line :x1="tick.x" y1="34" :x2="tick.x" y2="202" class="tick-line" />
@@ -534,6 +556,21 @@ h2 {
   stroke-linecap: round;
   stroke-linejoin: round;
   filter: drop-shadow(0 0 8px rgba(167, 139, 250, 0.16));
+}
+
+.legend-line {
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+
+.legend-text,
+.legend-more {
+  fill: #a1a1aa;
+  font-size: 11px;
+}
+
+.legend-more {
+  fill: #71717a;
 }
 
 .curve-point {
