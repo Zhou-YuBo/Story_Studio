@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import BottomDock from './components/common/BottomDock.vue'
+import ReminderFloatingLayer from './components/reminder/ReminderFloatingLayer.vue'
 </script>
 
 <template>
@@ -9,6 +10,8 @@ import BottomDock from './components/common/BottomDock.vue'
     <main class="flex-1 overflow-hidden flex">
       <RouterView />
     </main>
+
+    <ReminderFloatingLayer />
 
     <!-- 底部工作台栏 -->
     <BottomDock />

@@ -4,6 +4,7 @@ import { ref, watch, onBeforeUnmount, computed } from 'vue'
 import { useEditorBridge } from '../../stores/editor-bridge'
 import { useLineGridStore } from '../../stores/line-grid'
 import { useStructureStore } from '../../stores/structure'
+import { resolveStructureAtLine } from '../editor/line-grid/structure-context'
 
 const bridge = useEditorBridge()
 const lineGrid = useLineGridStore()
@@ -25,23 +26,10 @@ function updateCurrentPosition(): void {
   if (!scrollEl) return
 
   const centerLine = lineGrid.yToLineIndex(scrollEl.scrollTop + scrollEl.clientHeight / 2)
-  let foundActId = ''
-  let foundSeqId = ''
+  const context = resolveStructureAtLine(snapshot.value, centerLine)
 
-  for (const marker of snapshot.value.markers) {
-    if (marker.lineIndex > centerLine) break
-
-    if (marker.type === 'newAct') {
-      foundActId = marker.actId
-      foundSeqId = ''
-    } else if (marker.type === 'sequence') {
-      foundSeqId = marker.seqId
-      if (marker.actId) foundActId = marker.actId
-    }
-  }
-
-  currentActId.value = foundActId
-  currentSeqId.value = foundSeqId
+  currentActId.value = context.actId
+  currentSeqId.value = context.seqId
 }
 
 let scrollHandler: (() => void) | null = null
