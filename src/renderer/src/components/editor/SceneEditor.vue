@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { useEditor, EditorContent, type Editor } from '@tiptap/vue-3'
+import { useEditor, EditorContent, type Editor, type EditorEvents } from '@tiptap/vue-3'
 import StarterKit from '@tiptap/starter-kit'
 import { storeToRefs } from 'pinia'
-import { ref, onBeforeUnmount, onMounted, watchEffect, nextTick, computed } from 'vue'
+import { ref, onBeforeUnmount, onMounted, watch, nextTick, computed } from 'vue'
 import { useEditorBridge } from '../../stores/editor-bridge'
 import { useLineGridStore } from '../../stores/line-grid'
 import { useStructureSync } from '../../composables/useStructureSync'
@@ -112,20 +112,39 @@ const editor = useEditor({
 useStructureSync(editor)
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null
+let updateHandler: ((props: EditorEvents['update']) => void) | null = null
+let registeredEditor: Editor | null = null
 
-watchEffect(() => {
-  if (!editor.value) return
-  lineGridStore.rebuild(editor.value.state.doc)
-  editor.value.on('update', ({ editor: e }) => {
-    lineGridStore.rebuild(e.state.doc)
-    if (saveTimer) clearTimeout(saveTimer)
-    saveTimer = setTimeout(() => {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(e.getJSON()))
-    }, 200)
-  })
-})
+function detachUpdateHandler(): void {
+  if (registeredEditor && updateHandler) {
+    registeredEditor.off('update', updateHandler)
+  }
+  registeredEditor = null
+  updateHandler = null
+}
+
+watch(
+  editor,
+  (editorInstance, previousEditor) => {
+    if (previousEditor) detachUpdateHandler()
+    if (!editorInstance) return
+
+    lineGridStore.rebuild(editorInstance.state.doc)
+    updateHandler = ({ editor: e }) => {
+      lineGridStore.rebuild(e.state.doc)
+      if (saveTimer) clearTimeout(saveTimer)
+      saveTimer = setTimeout(() => {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(e.getJSON()))
+      }, 200)
+    }
+    editorInstance.on('update', updateHandler)
+    registeredEditor = editorInstance
+  },
+  { immediate: true }
+)
 
 onBeforeUnmount(() => {
+  detachUpdateHandler()
   if (saveTimer) {
     clearTimeout(saveTimer)
     saveTimer = null
