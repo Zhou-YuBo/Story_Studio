@@ -15,6 +15,7 @@ export interface CharacterDimensionSlot {
 interface WheelArrow {
   id: string
   dimensionId: string
+  slotIndex: number
   label: string
   angle: number
 }
@@ -24,6 +25,7 @@ const props = withDefaults(
     dimensions: CharacterDimensionPair[]
     slots?: CharacterDimensionSlot[]
     selectedDimensionId?: string
+    swapSourceDimensionId?: string
     size?: number
     ringRadius?: number
     arrowStartRadius?: number
@@ -31,12 +33,13 @@ const props = withDefaults(
     labelRadius?: number
   }>(),
   {
-    size: 520,
-  },
+    size: 520
+  }
 )
 
 const emit = defineEmits<{
   select: [dimensionId: string]
+  dimensionContext: [payload: { dimensionId: string; slotIndex: number; event: MouseEvent }]
 }>()
 
 const wheelCenter = computed(() => props.size / 2)
@@ -79,49 +82,63 @@ const wheelArrows = computed<WheelArrow[]>(() => {
       {
         id: `${dimension.id}-positive`,
         dimensionId: dimension.id,
+        slotIndex: index,
         label: dimension.positive,
-        angle: positiveAngle,
+        angle: positiveAngle
       },
       {
         id: `${dimension.id}-negative`,
         dimensionId: dimension.id,
+        slotIndex: index,
         label: dimension.negative,
-        angle: negativeAngle,
-      },
+        angle: negativeAngle
+      }
     ]
   })
 })
 
-function toRadians(angle: number) {
+function toRadians(angle: number): number {
   return (angle * Math.PI) / 180
 }
 
-function pointX(angle: number, radius: number) {
+function pointX(angle: number, radius: number): number {
   return wheelCenter.value + Math.cos(toRadians(angle)) * radius
 }
 
-function pointY(angle: number, radius: number) {
+function pointY(angle: number, radius: number): number {
   return wheelCenter.value + Math.sin(toRadians(angle)) * radius
 }
 
-function textAnchor(angle: number) {
+function textAnchor(angle: number): 'start' | 'end' | 'middle' {
   const horizontal = Math.cos(toRadians(angle))
   if (horizontal > 0.22) return 'start'
   if (horizontal < -0.22) return 'end'
   return 'middle'
 }
 
-function labelDx(angle: number) {
+function labelDx(angle: number): number {
   const horizontal = Math.cos(toRadians(angle))
   if (Math.abs(horizontal) < 0.22) return 0
   return horizontal > 0 ? 10 : -10
 }
 
-function labelDy(angle: number) {
+function labelDy(angle: number): number {
   const vertical = Math.sin(toRadians(angle))
   if (vertical > 0.78) return 16
   if (vertical < -0.78) return -10
   return 0
+}
+
+function isDimensionActive(dimensionId: string): boolean {
+  return dimensionId === props.selectedDimensionId || dimensionId === props.swapSourceDimensionId
+}
+
+function handleDimensionContext(arrow: WheelArrow, event: MouseEvent): void {
+  emit('dimensionContext', {
+    dimensionId: arrow.dimensionId,
+    slotIndex: arrow.slotIndex,
+    event
+  })
 }
 </script>
 
@@ -141,31 +158,27 @@ function labelDy(angle: number) {
       </marker>
     </defs>
 
-    <circle
-      class="dimension-ring"
-      :cx="wheelCenter"
-      :cy="wheelCenter"
-      :r="computedRingRadius"
-    />
+    <circle class="dimension-ring" :cx="wheelCenter" :cy="wheelCenter" :r="computedRingRadius" />
 
     <line
       v-for="arrow in wheelArrows"
       :key="`${arrow.id}-line`"
       class="dimension-arrow"
-      :class="{ 'dimension-arrow-selected': arrow.dimensionId === selectedDimensionId }"
+      :class="{ 'dimension-arrow-selected': isDimensionActive(arrow.dimensionId) }"
       :x1="pointX(arrow.angle, computedArrowStartRadius)"
       :y1="pointY(arrow.angle, computedArrowStartRadius)"
       :x2="pointX(arrow.angle, computedArrowEndRadius)"
       :y2="pointY(arrow.angle, computedArrowEndRadius)"
       marker-end="url(#dimension-arrowhead)"
       @click="emit('select', arrow.dimensionId)"
+      @contextmenu.prevent.stop="handleDimensionContext(arrow, $event)"
     />
 
     <text
       v-for="arrow in wheelArrows"
       :key="`${arrow.id}-label`"
       class="dimension-keyword"
-      :class="{ 'dimension-keyword-selected': arrow.dimensionId === selectedDimensionId }"
+      :class="{ 'dimension-keyword-selected': isDimensionActive(arrow.dimensionId) }"
       :x="pointX(arrow.angle, computedLabelRadius)"
       :y="pointY(arrow.angle, computedLabelRadius)"
       :dx="labelDx(arrow.angle)"
@@ -173,6 +186,7 @@ function labelDy(angle: number) {
       :text-anchor="textAnchor(arrow.angle)"
       dominant-baseline="middle"
       @click="emit('select', arrow.dimensionId)"
+      @contextmenu.prevent.stop="handleDimensionContext(arrow, $event)"
     >
       {{ arrow.label }}
     </text>

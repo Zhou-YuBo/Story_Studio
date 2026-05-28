@@ -1,11 +1,17 @@
 <script setup lang="ts">
-import CharacterDimensionWheel from './CharacterDimensionWheel.vue'
+import CharacterDimensionWheel, { type CharacterDimensionSlot } from './CharacterDimensionWheel.vue'
 import type { CharacterDetail } from './detail/types'
 
 defineProps<{
   character: CharacterDetail
   keyword: string
   active?: boolean
+  slots?: CharacterDimensionSlot[]
+  swapSourceDimensionId?: string
+}>()
+
+const emit = defineEmits<{
+  dimensionContext: [payload: { dimensionId: string; slotIndex: number; event: MouseEvent }]
 }>()
 </script>
 
@@ -13,11 +19,14 @@ defineProps<{
   <button class="cast-expanded-node" :class="{ 'cast-expanded-node-active': active }" type="button">
     <CharacterDimensionWheel
       :dimensions="character.dimensions"
+      :slots="slots"
+      :swap-source-dimension-id="swapSourceDimensionId"
       :size="180"
       :ring-radius="54"
       :arrow-start-radius="14"
       :arrow-end-radius="76"
       :label-radius="86"
+      @dimension-context="emit('dimensionContext', $event)"
     />
     <div class="expanded-caption">
       <strong>{{ character.profile.name || '未命名人物' }}</strong>

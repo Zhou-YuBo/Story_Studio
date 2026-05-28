@@ -4,6 +4,11 @@ import { ref } from 'vue'
 export type CastUniverseRing = 1 | 2 | 3
 export type CastUniverseSettleResult = 'snapped' | 'free' | 'duplicate'
 
+export interface CastUniverseDimensionSlot {
+  dimensionId: string
+  inverted?: boolean
+}
+
 export interface CastUniversePlacedNode {
   id: string
   characterId: string
@@ -13,6 +18,7 @@ export interface CastUniversePlacedNode {
   ring?: CastUniverseRing
   keyword: string
   expanded: boolean
+  dimensionSlots?: CastUniverseDimensionSlot[]
 }
 
 export interface CastUniverseCircleSystem {
@@ -74,6 +80,20 @@ function normalizeRing(ring: unknown): CastUniverseRing | undefined {
   return ring === 1 || ring === 2 || ring === 3 ? ring : undefined
 }
 
+function normalizeDimensionSlots(slots: unknown): CastUniverseDimensionSlot[] | undefined {
+  if (!Array.isArray(slots)) return undefined
+
+  const normalized = slots
+    .filter((slot): slot is Record<string, unknown> => typeof slot === 'object' && slot !== null)
+    .filter((slot) => typeof slot.dimensionId === 'string')
+    .map((slot) => ({
+      dimensionId: slot.dimensionId as string,
+      inverted: slot.inverted === true
+    }))
+
+  return normalized.length ? normalized : undefined
+}
+
 function normalizePlacedNode(node: CastUniversePlacedNode): CastUniversePlacedNode {
   return {
     id: node.id,
@@ -83,7 +103,8 @@ function normalizePlacedNode(node: CastUniversePlacedNode): CastUniversePlacedNo
     systemId: node.systemId,
     ring: normalizeRing(node.ring),
     keyword: node.keyword ?? '',
-    expanded: node.expanded ?? false
+    expanded: node.expanded ?? false,
+    dimensionSlots: normalizeDimensionSlots(node.dimensionSlots)
   }
 }
 
@@ -179,6 +200,33 @@ function getRingRadius(system: CastUniverseCircleSystem, ring: CastUniverseRing)
   if (ring === 1) return system.radius1
   if (ring === 2) return system.radius2
   return system.radius3
+}
+
+function createCompleteDimensionSlots(
+  currentSlots: CastUniverseDimensionSlot[] | undefined,
+  dimensionIds: string[]
+): CastUniverseDimensionSlot[] {
+  const availableDimensionIds = new Set(dimensionIds)
+  const usedDimensionIds = new Set<string>()
+  const slots: CastUniverseDimensionSlot[] = []
+
+  for (const slot of currentSlots ?? []) {
+    if (!availableDimensionIds.has(slot.dimensionId) || usedDimensionIds.has(slot.dimensionId))
+      continue
+
+    slots.push({
+      dimensionId: slot.dimensionId,
+      inverted: slot.inverted === true
+    })
+    usedDimensionIds.add(slot.dimensionId)
+  }
+
+  for (const dimensionId of dimensionIds) {
+    if (usedDimensionIds.has(dimensionId)) continue
+    slots.push({ dimensionId, inverted: false })
+  }
+
+  return slots
 }
 
 export const useCharacterCastUniverseStore = defineStore('characterCastUniverse', () => {
@@ -374,6 +422,25 @@ export const useCharacterCastUniverseStore = defineStore('characterCastUniverse'
     return true
   }
 
+  function swapNodeDimensionSlots(
+    nodeId: string,
+    sourceDimensionId: string,
+    targetDimensionId: string,
+    dimensionIds: string[]
+  ): boolean {
+    const node = getNodeById(nodeId)
+    if (!node || sourceDimensionId === targetDimensionId) return false
+
+    const slots = createCompleteDimensionSlots(node.dimensionSlots, dimensionIds)
+    const sourceIndex = slots.findIndex((slot) => slot.dimensionId === sourceDimensionId)
+    const targetIndex = slots.findIndex((slot) => slot.dimensionId === targetDimensionId)
+    if (sourceIndex < 0 || targetIndex < 0) return false
+    ;[slots[sourceIndex], slots[targetIndex]] = [slots[targetIndex], slots[sourceIndex]]
+    node.dimensionSlots = slots
+    saveBoard()
+    return true
+  }
+
   function setNodeKeyword(nodeId: string, keyword: string): void {
     const node = getNodeById(nodeId)
     if (!node) return
@@ -402,6 +469,7 @@ export const useCharacterCastUniverseStore = defineStore('characterCastUniverse'
     detachNode,
     removePlacedNode,
     restoreBoard,
+    swapNodeDimensionSlots,
     setNodeKeyword,
     toggleNodeExpanded
   }

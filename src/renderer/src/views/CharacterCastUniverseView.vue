@@ -17,6 +17,7 @@ import {
 
 const CHARACTER_DRAG_TYPE = 'application/x-story-studio-character-id'
 const MAX_UNDO_STACK_SIZE = 50
+const DIMENSION_CONTEXT_DOUBLE_CLICK_MS = 420
 
 const characterStore = useCharacterStore()
 const castStore = useCharacterCastUniverseStore()
@@ -38,6 +39,8 @@ const dragStart = ref({ x: 0, y: 0 })
 const dragOrigin = ref({ x: 0, y: 0 })
 const dragSnapshot = ref<CastUniverseBoard | null>(null)
 const undoStack = ref<CastUniverseBoard[]>([])
+const pendingDimensionSwap = ref<{ nodeId: string; dimensionId: string } | null>(null)
+const lastDimensionContext = ref<{ nodeId: string; dimensionId: string; time: number } | null>(null)
 
 const selectedNode = computed(() => {
   return castStore.board.placedNodes.find((node) => node.id === selectedNodeId.value)
@@ -107,6 +110,7 @@ function undoBoardChange(): void {
   if (!snapshot) return
 
   snapWarning.value = ''
+  clearDimensionSwap()
   castStore.restoreBoard(snapshot)
   if (
     selectedNodeId.value &&
@@ -124,6 +128,11 @@ function hasNodeChanged(before: CastUniverseBoard, nodeId: string): boolean {
 
 function isEditableTarget(target: EventTarget | null): boolean {
   return target instanceof HTMLElement && Boolean(target.closest('input, textarea, select'))
+}
+
+function clearDimensionSwap(): void {
+  pendingDimensionSwap.value = null
+  lastDimensionContext.value = null
 }
 
 function getCharacter(characterId: string): CharacterDetail | undefined {
@@ -149,6 +158,12 @@ function isCenterNode(node: CastUniversePlacedNode): boolean {
 
 function shouldRenderExpanded(node: CastUniversePlacedNode): boolean {
   return node.expanded || isCenterNode(node)
+}
+
+function getSwapSourceDimensionId(nodeId: string): string | undefined {
+  return pendingDimensionSwap.value?.nodeId === nodeId
+    ? pendingDimensionSwap.value.dimensionId
+    : undefined
 }
 
 function sourceDragStart(characterId: string, event: DragEvent): void {
@@ -195,6 +210,49 @@ function showDuplicateWarning(): void {
 function selectNode(nodeId: string): void {
   selectedNodeId.value = nodeId
   focusPage()
+}
+
+function handleDimensionContext(
+  node: CastUniversePlacedNode,
+  payload: { dimensionId: string; slotIndex: number; event: MouseEvent }
+): void {
+  payload.event.preventDefault()
+  payload.event.stopPropagation()
+  selectedNodeId.value = node.id
+  focusPage()
+
+  if (pendingDimensionSwap.value?.nodeId === node.id) {
+    if (pendingDimensionSwap.value.dimensionId !== payload.dimensionId) {
+      const character = characterStore.getCharacterById(node.characterId)
+      if (!character) return
+
+      pushBoardSnapshot()
+      castStore.swapNodeDimensionSlots(
+        node.id,
+        pendingDimensionSwap.value.dimensionId,
+        payload.dimensionId,
+        character.dimensions.map((dimension) => dimension.id)
+      )
+    }
+
+    clearDimensionSwap()
+    return
+  }
+
+  const now = Date.now()
+  const last = lastDimensionContext.value
+  const isDoubleContext =
+    last?.nodeId === node.id &&
+    last.dimensionId === payload.dimensionId &&
+    now - last.time <= DIMENSION_CONTEXT_DOUBLE_CLICK_MS
+
+  if (isDoubleContext) {
+    pendingDimensionSwap.value = { nodeId: node.id, dimensionId: payload.dimensionId }
+    lastDimensionContext.value = null
+    return
+  }
+
+  lastDimensionContext.value = { nodeId: node.id, dimensionId: payload.dimensionId, time: now }
 }
 
 function startDragNode(node: CastUniversePlacedNode, event: PointerEvent): void {
@@ -274,6 +332,11 @@ function zoomCanvas(delta: number): void {
 function handleWheel(event: WheelEvent): void {
   event.preventDefault()
   zoomCanvas(event.deltaY > 0 ? -0.06 : 0.06)
+}
+
+function handleCanvasContextMenu(event: MouseEvent): void {
+  event.preventDefault()
+  clearDimensionSwap()
 }
 
 function resetCanvasView(): void {
@@ -356,6 +419,11 @@ function handleKeyDown(event: KeyboardEvent): void {
     return
   }
 
+  if (event.key === 'Escape') {
+    clearDimensionSwap()
+    return
+  }
+
   if (event.key === 'Delete' || event.key === 'Backspace') {
     if (!selectedNode.value) return
 
@@ -405,6 +473,7 @@ function handleKeyDown(event: KeyboardEvent): void {
         @dragover.prevent
         @drop.prevent="dropCharacterOnCanvas"
         @wheel="handleWheel"
+        @contextmenu="handleCanvasContextMenu"
         @pointerdown="startPan"
         @pointermove="movePan"
         @pointerup="stopPan"
@@ -462,6 +531,9 @@ function handleKeyDown(event: KeyboardEvent): void {
               :character="getCharacter(node.characterId)!"
               :keyword="getNodeKeyword(node)"
               :active="node.id === selectedNodeId"
+              :slots="node.dimensionSlots"
+              :swap-source-dimension-id="getSwapSourceDimensionId(node.id)"
+              @dimension-context="handleDimensionContext(node, $event)"
             />
             <CastUniversePersonNode
               v-else
