@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import ValueCurvePanel from '../components/structure/ValueCurvePanel.vue'
 import {
   PROJECT_OWNER_ID,
+  type StoryCoreFields,
   type StructureOwnerType,
   useStructureStore,
 } from '../stores/structure'
@@ -16,6 +17,7 @@ type SelectedNode =
 
 const store = useStructureStore()
 const selectedNode = ref<SelectedNode>({ type: 'project' })
+const counterIdeaOpen = ref(false)
 
 const selectedAct = computed(() => {
   const node = selectedNode.value
@@ -74,6 +76,16 @@ const curveTargets = computed(() => {
 
   return []
 })
+
+const projectValueAxes = computed(() =>
+  store.getValueAxesForOwner('project', PROJECT_OWNER_ID),
+)
+
+const selectedCoreAxisIds = computed(() =>
+  store.storyCore.coreValueAxisIds.filter((axisId) =>
+    projectValueAxes.value.some((axis) => axis.id === axisId),
+  ),
+)
 
 function isProjectSelected() {
   return selectedNode.value.type === 'project'
@@ -138,6 +150,25 @@ function onActLabelBlur(actId: string, e: Event) {
 
 function onSeqColorChange(actId: string, seqId: string, e: Event) {
   store.updateSequenceColor(actId, seqId, (e.target as HTMLInputElement).value)
+}
+
+type StoryCoreTextField = Exclude<keyof StoryCoreFields, 'coreValueAxisIds'>
+
+function axisLabel(axisId: string) {
+  const axis = projectValueAxes.value.find((item) => item.id === axisId)
+  return axis ? `${axis.positiveLabel} / ${axis.negativeLabel}` : ''
+}
+
+function isCoreAxisSelected(axisId: string) {
+  return selectedCoreAxisIds.value.includes(axisId)
+}
+
+function updateStoryField(field: StoryCoreTextField, e: Event) {
+  store.updateStoryCoreField(field, (e.target as HTMLTextAreaElement | HTMLInputElement).value)
+}
+
+function toggleCoreAxis(axisId: string) {
+  store.toggleStoryCoreValueAxis(axisId)
 }
 
 function onSeqLabelBlur(actId: string, seqId: string, e: Event) {
@@ -254,8 +285,122 @@ function onSeqLabelBlur(actId: string, seqId: string, e: Event) {
         :targets="curveTargets"
       />
 
-      <section class="structure-lower-panel">
-        <div class="lower-placeholder">
+      <section class="structure-lower-panel scrollbar-panel">
+        <div v-if="isProjectSelected()" class="story-core-panel">
+          <div class="story-line">
+            <span>如果</span>
+            <input
+              :value="store.storyCore.premise"
+              class="story-inline-input story-input-xl"
+              type="text"
+              @input="updateStoryField('premise', $event)"
+            />
+            <span>，会怎样？</span>
+          </div>
+
+          <div class="story-line">
+            <input
+              :value="store.storyCore.balanceBreak"
+              class="story-inline-input story-input-xl"
+              type="text"
+              @input="updateStoryField('balanceBreak', $event)"
+            />
+            <span>打破了主角生活的平衡。</span>
+          </div>
+
+          <div class="story-line story-line-wrap">
+            <span>为了恢复平衡，主角想要</span>
+            <input
+              :value="store.storyCore.consciousDesire"
+              class="story-inline-input"
+              type="text"
+              @input="updateStoryField('consciousDesire', $event)"
+            />
+            <span>。实际上，主角要的是</span>
+            <input
+              :value="store.storyCore.unconsciousDesire"
+              class="story-inline-input"
+              type="text"
+              @input="updateStoryField('unconsciousDesire', $event)"
+            />
+            <span class="field-note">（选填）</span>
+          </div>
+
+          <div class="story-line core-axis-line">
+            <span>核心价值冲突是：</span>
+            <div v-if="projectValueAxes.length > 0" class="core-axis-chip-grid">
+              <button
+                v-for="axis in projectValueAxes"
+                :key="axis.id"
+                class="core-axis-chip"
+                :class="{ selected: isCoreAxisSelected(axis.id) }"
+                type="button"
+                :disabled="!isCoreAxisSelected(axis.id) && selectedCoreAxisIds.length >= 5"
+                @click="toggleCoreAxis(axis.id)"
+              >
+                <span class="axis-color" :style="{ background: axis.color }" />
+                <span>{{ axisLabel(axis.id) }}</span>
+              </button>
+            </div>
+            <span v-else class="core-axis-empty">尚未添加价值轴</span>
+            <span class="field-note">最多五个</span>
+          </div>
+
+          <div class="story-line">
+            <span>所以说，</span>
+            <input
+              :value="store.storyCore.controllingIdea"
+              class="story-inline-input story-input-xl"
+              type="text"
+              @input="updateStoryField('controllingIdea', $event)"
+            />
+            <span>，</span>
+          </div>
+
+          <div class="story-line">
+            <span>因为</span>
+            <input
+              :value="store.storyCore.controllingIdeaReason"
+              class="story-inline-input story-input-xl"
+              type="text"
+              @input="updateStoryField('controllingIdeaReason', $event)"
+            />
+            <span>。</span>
+          </div>
+
+          <div class="counter-idea-block" :class="{ open: counterIdeaOpen }">
+            <button class="counter-toggle" type="button" @click="counterIdeaOpen = !counterIdeaOpen">
+              <span>反面？</span>
+              <strong>{{ counterIdeaOpen ? '收起' : '展开' }}</strong>
+            </button>
+
+            <div v-if="counterIdeaOpen" class="counter-fields">
+              <div class="story-line">
+                <span>这个的反面是</span>
+                <input
+                  :value="store.storyCore.counterIdea"
+                  class="story-inline-input story-input-xl"
+                  type="text"
+                  @input="updateStoryField('counterIdea', $event)"
+                />
+                <span>，</span>
+              </div>
+
+              <div class="story-line">
+                <span>因为</span>
+                <input
+                  :value="store.storyCore.counterIdeaReason"
+                  class="story-inline-input story-input-xl"
+                  type="text"
+                  @input="updateStoryField('counterIdeaReason', $event)"
+                />
+                <span>。</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div v-else class="lower-placeholder">
           <div class="eyebrow">预留区域</div>
           <p>当前{{ selectedKindLabel }}：{{ selectedTitle }}</p>
         </div>
@@ -517,16 +662,157 @@ button.tree-row {
 .structure-lower-panel {
   flex: 2;
   min-height: 180px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   border: 1px solid #27272a;
   border-radius: 12px;
   background: #18181b;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  overflow: auto;
+}
+
+.story-core-panel {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 10px;
+  padding: 12px 18px;
+}
+
+.story-line {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  color: #d4d4d8;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.story-line-wrap {
+  flex-wrap: wrap;
+}
+
+.story-inline-input {
+  min-width: 180px;
+  flex: 1;
+  border: none;
+  border-bottom: 1px solid #52525b;
+  border-radius: 0;
+  background: transparent;
+  color: #e4e4e7;
+  outline: none;
+  padding: 2px 4px 3px;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.story-input-xl {
+  min-width: 360px;
+  flex: 1 1 520px;
+}
+
+.story-inline-input:focus {
+  border-bottom-color: #a78bfa;
+  box-shadow: 0 1px 0 rgba(167, 139, 250, 0.45);
+}
+
+.field-note {
+  color: #71717a;
+  font-size: 12px;
+}
+
+.core-axis-line {
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.core-axis-chip-grid {
+  min-width: 0;
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.core-axis-chip {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid #3f3f46;
+  border-radius: 999px;
+  background: #111114;
+  color: #a1a1aa;
+  cursor: pointer;
+  padding: 3px 8px;
+  font-size: 12px;
+  transition: all 0.15s;
+}
+
+.core-axis-chip:hover:not(:disabled),
+.core-axis-chip.selected {
+  border-color: rgba(167, 139, 250, 0.68);
+  background: rgba(167, 139, 250, 0.12);
+  color: #f4f4f5;
+}
+
+.core-axis-chip:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.axis-color {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+.core-axis-empty {
+  color: #71717a;
+  font-size: 12px;
+}
+
+.counter-idea-block {
+  border-top: 1px solid #27272a;
+  padding-top: 8px;
+}
+
+.counter-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: none;
+  background: transparent;
+  color: #71717a;
+  cursor: pointer;
+  padding: 0;
+  font-size: 12px;
+}
+
+.counter-toggle:hover,
+.counter-toggle strong {
+  color: #a78bfa;
+}
+
+.counter-toggle strong {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.counter-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
 }
 
 .lower-placeholder {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   text-align: center;
   color: #71717a;
 }

@@ -3,6 +3,20 @@ import { ref, computed } from 'vue'
 
 export type StructureOwnerType = 'project' | 'act' | 'sequence' | 'scene'
 
+export interface StoryCoreFields {
+  premise: string
+  balanceBreak: string
+  consciousDesire: string
+  unconsciousDesire: string
+  controllingIdea: string
+  controllingIdeaReason: string
+  counterIdea: string
+  counterIdeaReason: string
+  coreValueAxisIds: string[]
+}
+
+type StoryCoreTextField = Exclude<keyof StoryCoreFields, 'coreValueAxisIds'>
+
 export interface StructureSequence {
   id: string
   label: string
@@ -39,6 +53,7 @@ interface StructureState {
   valueAxes: ValueAxis[]
   visibleValueAxisIds: Record<string, string[]>
   valuePoints: ValuePoint[]
+  storyCore: StoryCoreFields
 }
 
 export const MORANDY_COLORS = [
@@ -70,6 +85,20 @@ let nextActNum = 1
 let nextSeqNum = 1
 let nextAxisNum = 1
 
+function createEmptyStoryCore(): StoryCoreFields {
+  return {
+    premise: '',
+    balanceBreak: '',
+    consciousDesire: '',
+    unconsciousDesire: '',
+    controllingIdea: '',
+    controllingIdeaReason: '',
+    counterIdea: '',
+    counterIdeaReason: '',
+    coreValueAxisIds: [],
+  }
+}
+
 function createEmptyState(): StructureState {
   return {
     version: 2,
@@ -77,6 +106,28 @@ function createEmptyState(): StructureState {
     valueAxes: [],
     visibleValueAxisIds: {},
     valuePoints: [],
+    storyCore: createEmptyStoryCore(),
+  }
+}
+
+function normalizeStoryCore(value: unknown): StoryCoreFields {
+  const empty = createEmptyStoryCore()
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return empty
+
+  const core = value as Partial<StoryCoreFields>
+  return {
+    premise: typeof core.premise === 'string' ? core.premise : '',
+    balanceBreak: typeof core.balanceBreak === 'string' ? core.balanceBreak : '',
+    consciousDesire: typeof core.consciousDesire === 'string' ? core.consciousDesire : '',
+    unconsciousDesire: typeof core.unconsciousDesire === 'string' ? core.unconsciousDesire : '',
+    controllingIdea: typeof core.controllingIdea === 'string' ? core.controllingIdea : '',
+    controllingIdeaReason:
+      typeof core.controllingIdeaReason === 'string' ? core.controllingIdeaReason : '',
+    counterIdea: typeof core.counterIdea === 'string' ? core.counterIdea : '',
+    counterIdeaReason: typeof core.counterIdeaReason === 'string' ? core.counterIdeaReason : '',
+    coreValueAxisIds: Array.isArray(core.coreValueAxisIds)
+      ? core.coreValueAxisIds.filter((id): id is string => typeof id === 'string').slice(0, 5)
+      : [],
   }
 }
 
@@ -93,6 +144,7 @@ function normalizeState(value: unknown): StructureState {
         ? state.visibleValueAxisIds
         : {},
     valuePoints: Array.isArray(state.valuePoints) ? state.valuePoints : [],
+    storyCore: normalizeStoryCore(state.storyCore),
   }
 }
 
@@ -166,6 +218,7 @@ export const useStructureStore = defineStore('structure', () => {
   const valueAxes = ref<ValueAxis[]>(initialState.valueAxes)
   const visibleValueAxisIds = ref<Record<string, string[]>>(initialState.visibleValueAxisIds)
   const valuePoints = ref<ValuePoint[]>(initialState.valuePoints)
+  const storyCore = ref<StoryCoreFields>(initialState.storyCore)
 
   function save() {
     saveToStorage({
@@ -174,6 +227,7 @@ export const useStructureStore = defineStore('structure', () => {
       valueAxes: valueAxes.value,
       visibleValueAxisIds: visibleValueAxisIds.value,
       valuePoints: valuePoints.value,
+      storyCore: storyCore.value,
     })
   }
 
@@ -309,6 +363,7 @@ export const useStructureStore = defineStore('structure', () => {
 
     valueAxes.value = valueAxes.value.filter((item) => item.id !== axisId)
     valuePoints.value = valuePoints.value.filter((point) => point.axisId !== axisId)
+    cleanupStoryCoreValueAxes()
 
     const key = getOwnerKey(axis.ownerType, axis.ownerId)
     visibleValueAxisIds.value[key] = (visibleValueAxisIds.value[key] ?? []).filter(
@@ -383,6 +438,27 @@ export const useStructureStore = defineStore('structure', () => {
       ?.value ?? 0
   }
 
+  function updateStoryCoreField(field: StoryCoreTextField, value: string) {
+    storyCore.value[field] = value
+    save()
+  }
+
+  function toggleStoryCoreValueAxis(axisId: string) {
+    const existingIds = new Set(valueAxes.value.map((axis) => axis.id))
+    const current = storyCore.value.coreValueAxisIds.filter((id) => existingIds.has(id))
+    storyCore.value.coreValueAxisIds = current.includes(axisId)
+      ? current.filter((id) => id !== axisId)
+      : current.length >= 5
+        ? current
+        : [...current, axisId]
+    save()
+  }
+
+  function cleanupStoryCoreValueAxes() {
+    const existingIds = new Set(valueAxes.value.map((axis) => axis.id))
+    storyCore.value.coreValueAxisIds = storyCore.value.coreValueAxisIds.filter((id) => existingIds.has(id))
+  }
+
   function cleanupOwner(ownerType: StructureOwnerType, ownerId: string) {
     const axesToRemove = getValueAxesForOwner(ownerType, ownerId).map((axis) => axis.id)
     valueAxes.value = valueAxes.value.filter((axis) => !axesToRemove.includes(axis.id))
@@ -407,6 +483,7 @@ export const useStructureStore = defineStore('structure', () => {
     valueAxes,
     visibleValueAxisIds,
     valuePoints,
+    storyCore,
     totalSequences,
     flatSequences,
     addAct,
@@ -426,6 +503,8 @@ export const useStructureStore = defineStore('structure', () => {
     toggleValueAxisVisible,
     setValuePoint,
     getValuePoint,
+    updateStoryCoreField,
+    toggleStoryCoreValueAxis,
   }
 })
 
