@@ -1,3 +1,4 @@
+import { textLineOffset } from '../text-metrics'
 import { elementLayoutConfig, LINE_GRID_CONFIG } from './constants'
 import type { BlockLineRange, LineGridConfig, LineGridSnapshot } from './types'
 
@@ -92,30 +93,6 @@ export function docPosToLineIndex(snapshot: LineGridSnapshot, pos: number): numb
   if (next) return next.contentStartLine
 
   return snapshot.blocks[snapshot.blocks.length - 1].endLine
-}
-
-function textLineOffset(text: string, charsPerLine: number): number {
-  let lines = 0
-  let lineWidth = 0
-
-  for (let i = 0; i < text.length; i += 1) {
-    const code = text.charCodeAt(i)
-    const width =
-      (code >= 0x2e80 && code <= 0x9fff) ||
-      (code >= 0xf900 && code <= 0xfaff) ||
-      (code >= 0xfe30 && code <= 0xfe4f) ||
-      (code >= 0xff01 && code <= 0xff60) ||
-      (code >= 0xffe0 && code <= 0xffe6)
-        ? 2
-        : 1
-    lineWidth += width
-    if (lineWidth > charsPerLine) {
-      lines += 1
-      lineWidth = width
-    }
-  }
-
-  return lines
 }
 
 export function docPosToVisualLineIndex(snapshot: LineGridSnapshot, pos: number): number {
