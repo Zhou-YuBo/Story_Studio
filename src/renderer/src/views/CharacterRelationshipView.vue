@@ -880,6 +880,21 @@ function saveRelationship(): void {
   .relationship-workbench {
     grid-template-columns: 1fr;
     overflow: auto;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(161, 161, 170, 0.24) transparent;
+  }
+
+  .relationship-workbench::-webkit-scrollbar {
+    width: 7px;
+  }
+
+  .relationship-workbench::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .relationship-workbench::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    background: rgba(161, 161, 170, 0.2);
   }
 }
 </style>

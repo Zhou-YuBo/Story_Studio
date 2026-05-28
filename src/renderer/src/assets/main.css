@@ -298,3 +298,26 @@ code {
 .scrollbar-none::-webkit-scrollbar {
   display: none;
 }
+
+textarea {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(161, 161, 170, 0.2) transparent;
+}
+
+textarea::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+textarea::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+textarea::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(161, 161, 170, 0.16);
+}
+
+textarea:hover::-webkit-scrollbar-thumb {
+  background: rgba(212, 212, 216, 0.28);
+}

@@ -1149,6 +1149,21 @@ function openDetailPanel() {
   .inquiry-stage {
     grid-template-columns: 1fr;
     overflow: auto;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(161, 161, 170, 0.24) transparent;
+  }
+
+  .inquiry-stage::-webkit-scrollbar {
+    width: 7px;
+  }
+
+  .inquiry-stage::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .inquiry-stage::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    background: rgba(161, 161, 170, 0.2);
   }
 
   .participant-select-grid,

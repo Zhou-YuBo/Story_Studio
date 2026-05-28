@@ -495,6 +495,21 @@ function openDetailPanel() {
   .dimension-stage {
     grid-template-columns: 1fr;
     overflow: auto;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(161, 161, 170, 0.24) transparent;
+  }
+
+  .dimension-stage::-webkit-scrollbar {
+    width: 7px;
+  }
+
+  .dimension-stage::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .dimension-stage::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    background: rgba(161, 161, 170, 0.2);
   }
 
   .wheel-panel {
