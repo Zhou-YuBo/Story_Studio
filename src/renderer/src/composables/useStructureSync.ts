@@ -60,9 +60,12 @@ export function useStructureSync(editorRef: ShallowRef<Editor | undefined>) {
   function fullFill(editor: Editor) {
     if (structureStore.acts.length === 0) return
     isSyncing = true
-    const json = buildDocJson(structureStore.acts)
-    editor.commands.setContent(json)
-    isSyncing = false
+    try {
+      const json = buildDocJson(structureStore.acts)
+      editor.commands.setContent(json)
+    } finally {
+      isSyncing = false
+    }
   }
 
   function syncStructureToEditor(editor: Editor) {
@@ -197,8 +200,11 @@ export function useStructureSync(editorRef: ShallowRef<Editor | undefined>) {
       }
     }
 
-    editor.view.dispatch(tr)
-    isSyncing = false
+    try {
+      editor.view.dispatch(tr)
+    } finally {
+      isSyncing = false
+    }
   }
 
   function syncLabels(editor: Editor, markers: MarkerLineRange[]) {
@@ -255,8 +261,11 @@ export function useStructureSync(editorRef: ShallowRef<Editor | undefined>) {
 
     if (changed) {
       isSyncing = true
-      editor.view.dispatch(tr)
-      isSyncing = false
+      try {
+        editor.view.dispatch(tr)
+      } finally {
+        isSyncing = false
+      }
     }
   }
 
