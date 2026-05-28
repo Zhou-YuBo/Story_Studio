@@ -1,14 +1,13 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { useStructureStore } from '../stores/structure'
+import ValueCurvePanel from '../components/structure/ValueCurvePanel.vue'
+import {
+  PROJECT_OWNER_ID,
+  type StructureOwnerType,
+  useStructureStore,
+} from '../stores/structure'
 
 const PROJECT_TITLE = '未命名项目'
-
-const CHART_WIDTH = 720
-const CHART_LEFT = 56
-const CHART_RIGHT = 32
-const CHART_TOP = 36
-const CHART_HEIGHT = 178
 
 type SelectedNode =
   | { type: 'project' }
@@ -48,51 +47,32 @@ const horizontalUnitLabel = computed(() => {
   return '场景'
 })
 
-const curveUnitLabels = computed(() => {
+const selectedOwnerType = computed<StructureOwnerType>(() => selectedNode.value.type)
+
+const selectedOwnerId = computed(() => {
+  if (selectedNode.value.type === 'project') return PROJECT_OWNER_ID
+  if (selectedNode.value.type === 'act') return selectedNode.value.actId
+  return selectedNode.value.seqId
+})
+
+const curveTargets = computed(() => {
   if (selectedNode.value.type === 'project') {
-    return store.acts.map((act) => act.label)
+    return store.acts.map((act) => ({
+      id: act.id,
+      type: 'act' as StructureOwnerType,
+      label: act.label,
+    }))
   }
 
   if (selectedNode.value.type === 'act') {
-    return selectedAct.value?.sequences.map((seq) => seq.label) ?? []
+    return (selectedAct.value?.sequences ?? []).map((seq) => ({
+      id: seq.id,
+      type: 'sequence' as StructureOwnerType,
+      label: seq.label,
+    }))
   }
 
   return []
-})
-
-const tickPositions = computed(() => {
-  const labels = curveUnitLabels.value
-  const chartWidth = CHART_WIDTH - CHART_LEFT - CHART_RIGHT
-
-  return labels.map((label, index) => ({
-    label,
-    x: labels.length === 1 ? CHART_LEFT + chartWidth / 2 : CHART_LEFT + (chartWidth * index) / (labels.length - 1),
-  }))
-})
-
-const curveSeries = computed(() => {
-  const labels = curveUnitLabels.value
-  if (labels.length === 0) return []
-
-  const presets = [
-    { label: '安全 / 危险', color: '#a78bfa', values: [0.68, 0.55, 0.34, 0.22, 0.4, 0.28] },
-    { label: '信任 / 怀疑', color: '#60a5fa', values: [0.42, 0.5, 0.62, 0.48, 0.35, 0.28] },
-  ]
-
-  return presets.map((series) => {
-    const points = labels.map((_, index) => {
-      const x = tickPositions.value[index].x
-      const value = series.values[index % series.values.length]
-      const y = CHART_TOP + (1 - value) * CHART_HEIGHT
-      return `${index === 0 ? 'M' : 'L'} ${x.toFixed(1)} ${y.toFixed(1)}`
-    })
-
-    return {
-      label: series.label,
-      color: series.color,
-      path: points.join(' '),
-    }
-  })
 })
 
 function isProjectSelected() {
@@ -266,62 +246,13 @@ function onSeqLabelBlur(actId: string, seqId: string, e: Event) {
     </aside>
 
     <main class="structure-main">
-      <section class="value-curve-panel">
-        <div class="panel-header">
-          <div>
-            <div class="eyebrow">价值曲线</div>
-            <h2>{{ selectedTitle }}</h2>
-          </div>
-          <div class="scope-pill">横轴：{{ horizontalUnitLabel }}</div>
-        </div>
-
-        <div class="curve-stage">
-          <svg
-            v-if="curveUnitLabels.length > 0"
-            class="curve-svg"
-            viewBox="0 0 720 280"
-            role="img"
-            aria-label="价值曲线占位图"
-          >
-            <line x1="56" y1="36" x2="56" y2="214" class="axis-line" />
-            <line x1="56" y1="214" x2="688" y2="214" class="axis-line" />
-            <line x1="56" y1="125" x2="688" y2="125" class="center-line" />
-
-            <line x1="56" y1="66" x2="688" y2="66" class="grid-line" />
-            <line x1="56" y1="184" x2="688" y2="184" class="grid-line" />
-
-            <g v-for="tick in tickPositions" :key="tick.label">
-              <line :x1="tick.x" y1="36" :x2="tick.x" y2="214" class="tick-line" />
-              <text :x="tick.x" y="242" text-anchor="middle" class="tick-label">
-                {{ tick.label }}
-              </text>
-            </g>
-
-            <path
-              v-for="series in curveSeries"
-              :key="series.label"
-              :d="series.path"
-              :stroke="series.color"
-              class="curve-path"
-            />
-          </svg>
-
-          <div v-else class="curve-empty">
-            <span>当前{{ selectedKindLabel }}暂无可展示的{{ horizontalUnitLabel }}</span>
-            <small>左侧添加{{ horizontalUnitLabel }}后，这里将形成价值曲线横轴。</small>
-          </div>
-        </div>
-
-        <div class="curve-footer">
-          <div class="legend-list">
-            <span v-for="series in curveSeries" :key="series.label" class="legend-item">
-              <span class="legend-dot" :style="{ background: series.color }" />
-              {{ series.label }}
-            </span>
-          </div>
-          <span class="curve-note">曲线为占位示意，价值轴与数值后续接入。</span>
-        </div>
-      </section>
+      <ValueCurvePanel
+        :owner-type="selectedOwnerType"
+        :owner-id="selectedOwnerId"
+        :title="selectedTitle"
+        :horizontal-unit-label="horizontalUnitLabel"
+        :targets="curveTargets"
+      />
 
       <section class="structure-lower-panel">
         <div class="lower-placeholder">
@@ -583,144 +514,16 @@ button.tree-row {
   overflow: hidden;
 }
 
-.value-curve-panel,
-.structure-lower-panel {
-  border: 1px solid #27272a;
-  border-radius: 12px;
-  background: #18181b;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
-}
-
-.value-curve-panel {
-  min-height: 360px;
-  flex: 3;
-  display: flex;
-  flex-direction: column;
-  padding: 18px;
-}
-
 .structure-lower-panel {
   flex: 2;
   min-height: 180px;
   display: flex;
   align-items: center;
   justify-content: center;
-}
-
-.scope-pill {
-  border: 1px solid #3f3f46;
-  border-radius: 999px;
-  padding: 5px 12px;
-  color: #a1a1aa;
-  font-size: 12px;
-  background: rgba(255, 255, 255, 0.03);
-}
-
-.curve-stage {
-  min-height: 0;
-  flex: 1;
-  margin-top: 18px;
   border: 1px solid #27272a;
-  border-radius: 10px;
-  background:
-    radial-gradient(circle at 50% 10%, rgba(167, 139, 250, 0.08), transparent 34%),
-    #101013;
-  overflow: hidden;
-}
-
-.curve-svg {
-  width: 100%;
-  height: 100%;
-  min-height: 260px;
-  display: block;
-}
-
-.axis-line,
-.center-line,
-.grid-line,
-.tick-line {
-  fill: none;
-  vector-effect: non-scaling-stroke;
-}
-
-.axis-line {
-  stroke: #3f3f46;
-  stroke-width: 1.2;
-}
-
-.center-line {
-  stroke: #52525b;
-  stroke-dasharray: 5 7;
-  stroke-width: 1;
-}
-
-.grid-line,
-.tick-line {
-  stroke: rgba(113, 113, 122, 0.22);
-  stroke-width: 1;
-}
-
-.tick-label {
-  fill: #a1a1aa;
-  font-size: 12px;
-}
-
-.curve-path {
-  fill: none;
-  stroke-width: 3;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  filter: drop-shadow(0 0 8px rgba(167, 139, 250, 0.16));
-}
-
-.curve-empty {
-  width: 100%;
-  height: 100%;
-  min-height: 260px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  color: #71717a;
-  font-size: 14px;
-}
-
-.curve-empty small {
-  color: #52525b;
-  font-size: 12px;
-}
-
-.curve-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  margin-top: 12px;
-  color: #71717a;
-  font-size: 12px;
-}
-
-.legend-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-}
-
-.legend-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.legend-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 999px;
-}
-
-.curve-note {
-  color: #52525b;
+  border-radius: 12px;
+  background: #18181b;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
 
 .lower-placeholder {
