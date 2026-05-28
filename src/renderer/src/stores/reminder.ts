@@ -19,6 +19,8 @@ export interface ReminderCategory {
 export interface ReminderVisualState {
   x: number
   y: number
+  width: number
+  height: number
   zIndex: number
   collapsed: boolean
 }
@@ -122,6 +124,8 @@ function normalizeVisual(value: unknown): ReminderVisualState | null {
   return {
     x: value.x,
     y: value.y,
+    width: typeof value.width === 'number' ? value.width : 300,
+    height: typeof value.height === 'number' ? value.height : 228,
     zIndex: value.zIndex,
     collapsed: value.collapsed,
   }
@@ -379,13 +383,15 @@ export const useReminderStore = defineStore('reminder', () => {
   function ensureVisual(noteId: string, visualKey: string, index: number): ReminderVisualState {
     const note = notes.value.find((candidate) => candidate.id === noteId)
     if (!note) {
-      return { x: 32, y: 32, zIndex: nextZIndex++, collapsed: false }
+      return { x: 32, y: 32, width: 300, height: 228, zIndex: nextZIndex++, collapsed: false }
     }
 
     if (!note.visuals[visualKey]) {
       note.visuals[visualKey] = {
         x: 32 + (index % 3) * 300,
         y: 32 + Math.floor(index / 3) * 180,
+        width: 300,
+        height: 228,
         zIndex: nextZIndex++,
         collapsed: false,
       }
@@ -401,6 +407,24 @@ export const useReminderStore = defineStore('reminder', () => {
     if (!visual) return
     visual.x = x
     visual.y = y
+    save()
+  }
+
+  function resizeVisual(
+    noteId: string,
+    visualKey: string,
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+  ): void {
+    const note = notes.value.find((candidate) => candidate.id === noteId)
+    const visual = note?.visuals[visualKey]
+    if (!visual) return
+    visual.x = x
+    visual.y = y
+    visual.width = width
+    visual.height = height
     save()
   }
 
@@ -444,6 +468,7 @@ export const useReminderStore = defineStore('reminder', () => {
     visualKeyForScene,
     ensureVisual,
     moveVisual,
+    resizeVisual,
     toggleCollapsed,
     bringToFront,
   }
