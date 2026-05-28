@@ -130,7 +130,7 @@ function openDetailPanel() {
         </div>
       </section>
 
-      <aside class="control-panel" aria-label="维度操控板">
+      <aside class="control-panel scrollbar-panel" aria-label="维度操控板">
         <section class="panel-section">
           <div class="panel-title-row">
             <div>

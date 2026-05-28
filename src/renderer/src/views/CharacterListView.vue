@@ -43,7 +43,7 @@ function createCharacter() {
         <span v-for="(count, layer) in layerCounts" :key="layer">{{ layer }} {{ count }}</span>
       </div>
 
-      <div class="character-list">
+      <div class="character-list scrollbar-subtle">
         <button
           v-for="character in characterStore.characters"
           :key="character.id"
@@ -58,7 +58,7 @@ function createCharacter() {
       </div>
     </aside>
 
-    <main v-if="selectedCharacter" class="character-detail">
+    <main v-if="selectedCharacter" class="character-detail scrollbar-panel">
       <CharacterIdentityUnit
         class="grid-span-12"
         :profile="selectedCharacter.profile"

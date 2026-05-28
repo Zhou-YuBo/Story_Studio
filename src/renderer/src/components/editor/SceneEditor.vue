@@ -282,7 +282,7 @@ function onPickerKeydown(e: KeyboardEvent): void {
         </button>
       </div>
     </div>
-    <div class="editor-scroll" ref="scrollRef">
+    <div class="editor-scroll scrollbar-editor" ref="scrollRef">
       <div class="page-container" :style="pageContainerStyle">
         <EditorContent :editor="editor" />
       </div>
@@ -290,7 +290,7 @@ function onPickerKeydown(e: KeyboardEvent): void {
       <Teleport to="body">
         <div
           v-if="elementPickerVisible"
-          class="element-picker"
+          class="element-picker scrollbar-floating"
           :style="pickerStyle()"
           @click.stop
           @mousedown.prevent

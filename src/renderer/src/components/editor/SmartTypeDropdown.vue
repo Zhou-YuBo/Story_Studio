@@ -42,7 +42,7 @@ const positionStyle = () => {
   <Teleport to="body">
     <div
       v-if="state.visible && state.filtered.length > 0"
-      class="smarttype-dropdown"
+      class="smarttype-dropdown scrollbar-floating"
       :style="positionStyle()"
       ref="dropdownRef"
       @mousedown.prevent

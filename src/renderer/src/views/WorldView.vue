@@ -317,7 +317,7 @@ function onPaneClick(event: MouseEvent) {
       </div>
 
       <!-- 条目 Tab -->
-      <div v-show="leftTab === 'entries'" class="flex-1 overflow-y-auto">
+      <div v-show="leftTab === 'entries'" class="flex-1 overflow-y-auto scrollbar-subtle">
         <div v-for="cat in store.categories" :key="cat.id" class="border-b border-zinc-800/50">
           <div
             class="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-zinc-800/40 transition-colors select-none"

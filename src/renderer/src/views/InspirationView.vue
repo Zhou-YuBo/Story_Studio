@@ -340,7 +340,7 @@ function formatDateTime(iso: string): string {
       </div>
 
       <!-- 素材 Tab -->
-      <div v-show="leftTab === 'materials'" class="flex-1 overflow-y-auto">
+      <div v-show="leftTab === 'materials'" class="flex-1 overflow-y-auto scrollbar-subtle">
         <div
           v-for="item in store.items"
           :key="item.id"
@@ -457,7 +457,7 @@ function formatDateTime(iso: string): string {
             @click="store.deleteNote(store.editingNoteId!)"
           >删除</button>
         </header>
-        <div class="flex-1 overflow-y-auto flex flex-col">
+        <div class="flex-1 overflow-y-auto flex flex-col scrollbar-panel">
           <textarea
             class="flex-1 min-h-[120px] bg-transparent text-sm text-zinc-200 p-3 resize-none outline-none placeholder-zinc-600"
             :value="store.notes.find(n => n.id === store.editingNoteId)?.content ?? ''"
@@ -504,7 +504,7 @@ function formatDateTime(iso: string): string {
             <span class="text-sm text-zinc-400 tracking-wide">全部笔记</span>
             <button class="text-zinc-500 hover:text-white transition text-lg leading-none" @click="handleCreateNote">+</button>
           </header>
-          <div class="flex-1 overflow-y-auto">
+          <div class="flex-1 overflow-y-auto scrollbar-subtle">
             <div
               v-for="note in store.notes"
               :key="note.id"
@@ -537,7 +537,7 @@ function formatDateTime(iso: string): string {
           <header class="h-10 flex items-center px-3 border-b border-zinc-800 flex-shrink-0">
             <span class="text-sm text-zinc-400 tracking-wide">本画布笔记</span>
           </header>
-          <div class="flex-1 overflow-y-auto">
+          <div class="flex-1 overflow-y-auto scrollbar-subtle">
             <div
               v-for="note in canvasNotes"
               :key="note.id"

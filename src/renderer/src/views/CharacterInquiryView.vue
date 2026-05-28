@@ -341,7 +341,7 @@ function openDetailPanel() {
       </div>
     </header>
 
-    <main v-if="stage === 'setup'" class="setup-stage">
+    <main v-if="stage === 'setup'" class="setup-stage scrollbar-panel">
       <section class="setup-card">
         <p class="section-kicker">Before They Enter</p>
         <h2>今天要请谁进来？</h2>
@@ -437,7 +437,7 @@ function openDetailPanel() {
     </main>
 
     <main v-else class="inquiry-stage" :class="`inquiry-stage-${stage}`">
-      <section class="stage-page stage-page-left">
+      <section class="stage-page stage-page-left scrollbar-panel">
         <template v-if="stage === 'prepare'">
           <div class="page-title-row">
             <div>
@@ -504,7 +504,7 @@ function openDetailPanel() {
         </template>
       </section>
 
-      <section class="stage-page stage-page-right">
+      <section class="stage-page stage-page-right scrollbar-panel">
         <template v-if="stage === 'prepare'">
           <div class="waiting-room" :class="`waiting-room-${participantMode}`">
             <p class="section-kicker">Waiting Room</p>
@@ -531,7 +531,7 @@ function openDetailPanel() {
               >
             </div>
 
-            <div class="chat-thread">
+            <div class="chat-thread scrollbar-panel">
               <article
                 v-for="row in presetDialogueRows"
                 :key="row.id"
@@ -576,7 +576,7 @@ function openDetailPanel() {
               <button class="ghost-button" type="button" @click="finishInquiry">完成问询</button>
             </div>
 
-            <div class="chat-thread">
+            <div class="chat-thread scrollbar-panel">
               <article
                 v-for="row in freeformDialogueRows"
                 :key="row.id"

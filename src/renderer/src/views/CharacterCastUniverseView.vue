@@ -451,7 +451,7 @@ function handleKeyDown(event: KeyboardEvent): void {
           <p class="source-hint">把人物拖进画布；同一个人物可以拖入多次。</p>
         </div>
 
-        <div class="source-list">
+        <div class="source-list scrollbar-subtle">
           <div
             v-for="character in characterStore.characters"
             :key="character.id"

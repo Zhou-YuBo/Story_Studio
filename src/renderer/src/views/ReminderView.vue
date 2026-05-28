@@ -170,7 +170,7 @@ function removeTarget(note: ReminderNote, target: ReminderTarget): void {
 
 <template>
   <div class="reminder-view">
-    <aside class="sidebar">
+    <aside class="sidebar scrollbar-subtle">
       <div class="sidebar-header">
         <div>
           <div class="eyebrow">Reminder</div>
@@ -241,7 +241,7 @@ function removeTarget(note: ReminderNote, target: ReminderTarget): void {
       </div>
     </aside>
 
-    <main class="note-list-panel">
+    <main class="note-list-panel scrollbar-subtle">
       <div class="list-header">
         <div>
           <div class="eyebrow">Stickies</div>
@@ -273,7 +273,7 @@ function removeTarget(note: ReminderNote, target: ReminderTarget): void {
       </button>
     </main>
 
-    <aside class="editor-panel">
+    <aside class="editor-panel scrollbar-panel">
       <template v-if="selectedNote">
         <div class="editor-header">
           <div>

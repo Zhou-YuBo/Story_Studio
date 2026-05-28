@@ -93,7 +93,7 @@ watch(
         </select>
       </label>
 
-      <div class="portable-detail-body">
+      <div class="portable-detail-body scrollbar-panel">
         <CharacterIdentityUnit compact :profile="selectedCharacter.profile" @save="emit('save')" />
         <CharacterTruthUnit compact :truth="selectedCharacter.truth" @save="emit('save')" />
         <CharacterDriveUnit compact :drive="selectedCharacter.drive" @save="emit('save')" />

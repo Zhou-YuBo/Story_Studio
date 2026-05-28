@@ -21,7 +21,7 @@ function onSeqLabelBlur(actId: string, seqId: string, e: Event) {
 </script>
 
 <template>
-  <div class="structure-view">
+  <div class="structure-view scrollbar-panel">
     <div class="structure-panel">
       <div class="panel-header">
         <span class="panel-title">结构配置</span>

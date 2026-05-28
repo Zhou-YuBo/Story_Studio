@@ -182,7 +182,7 @@ onBeforeUnmount(() => {
     </header>
 
     <div v-if="!visual.collapsed" class="sticky-body">
-      <p>{{ note.content || '还没有写提醒内容。' }}</p>
+      <p class="scrollbar-floating">{{ note.content || '还没有写提醒内容。' }}</p>
       <div class="sticky-footer">
         <span>{{ category.name }}</span>
       </div>
