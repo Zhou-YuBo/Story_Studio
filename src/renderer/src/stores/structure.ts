@@ -443,15 +443,37 @@ export const useStructureStore = defineStore('structure', () => {
     save()
   }
 
-  function toggleStoryCoreValueAxis(axisId: string) {
+  function getValidStoryCoreValueAxisIds() {
     const existingIds = new Set(valueAxes.value.map((axis) => axis.id))
-    const current = storyCore.value.coreValueAxisIds.filter((id) => existingIds.has(id))
-    storyCore.value.coreValueAxisIds = current.includes(axisId)
-      ? current.filter((id) => id !== axisId)
-      : current.length >= 5
-        ? current
-        : [...current, axisId]
+    return storyCore.value.coreValueAxisIds.filter((id) => existingIds.has(id))
+  }
+
+  function addStoryCoreValueAxis(axisId: string) {
+    const current = getValidStoryCoreValueAxisIds()
+    if (current.includes(axisId) || current.length >= 5) return
+    storyCore.value.coreValueAxisIds = [...current, axisId]
     save()
+  }
+
+  function removeStoryCoreValueAxis(axisId: string) {
+    storyCore.value.coreValueAxisIds = getValidStoryCoreValueAxisIds().filter((id) => id !== axisId)
+    save()
+  }
+
+  function setPrimaryStoryCoreValueAxis(axisId: string) {
+    const current = getValidStoryCoreValueAxisIds()
+    if (!current.includes(axisId)) return
+    storyCore.value.coreValueAxisIds = [axisId, ...current.filter((id) => id !== axisId)]
+    save()
+  }
+
+  function toggleStoryCoreValueAxis(axisId: string) {
+    const current = getValidStoryCoreValueAxisIds()
+    if (current.includes(axisId)) {
+      removeStoryCoreValueAxis(axisId)
+    } else {
+      addStoryCoreValueAxis(axisId)
+    }
   }
 
   function cleanupStoryCoreValueAxes() {
@@ -504,6 +526,9 @@ export const useStructureStore = defineStore('structure', () => {
     setValuePoint,
     getValuePoint,
     updateStoryCoreField,
+    addStoryCoreValueAxis,
+    removeStoryCoreValueAxis,
+    setPrimaryStoryCoreValueAxis,
     toggleStoryCoreValueAxis,
   }
 })

@@ -18,6 +18,9 @@ type SelectedNode =
 const store = useStructureStore()
 const selectedNode = ref<SelectedNode>({ type: 'project' })
 const counterIdeaOpen = ref(false)
+const coreAxisPickerOpen = ref(false)
+const newCorePositiveLabel = ref('')
+const newCoreNegativeLabel = ref('')
 
 const selectedAct = computed(() => {
   const node = selectedNode.value
@@ -85,6 +88,16 @@ const selectedCoreAxisIds = computed(() =>
   store.storyCore.coreValueAxisIds.filter((axisId) =>
     projectValueAxes.value.some((axis) => axis.id === axisId),
   ),
+)
+
+const selectedCoreAxes = computed(() =>
+  selectedCoreAxisIds.value
+    .map((axisId) => projectValueAxes.value.find((axis) => axis.id === axisId))
+    .filter((axis) => axis !== undefined),
+)
+
+const availableCoreAxes = computed(() =>
+  projectValueAxes.value.filter((axis) => !selectedCoreAxisIds.value.includes(axis.id)),
 )
 
 function isProjectSelected() {
@@ -159,16 +172,33 @@ function axisLabel(axisId: string) {
   return axis ? `${axis.positiveLabel} / ${axis.negativeLabel}` : ''
 }
 
-function isCoreAxisSelected(axisId: string) {
-  return selectedCoreAxisIds.value.includes(axisId)
-}
-
 function updateStoryField(field: StoryCoreTextField, e: Event) {
   store.updateStoryCoreField(field, (e.target as HTMLTextAreaElement | HTMLInputElement).value)
 }
 
-function toggleCoreAxis(axisId: string) {
-  store.toggleStoryCoreValueAxis(axisId)
+function addCoreAxis(axisId: string) {
+  store.addStoryCoreValueAxis(axisId)
+  coreAxisPickerOpen.value = false
+}
+
+function removeCoreAxis(axisId: string) {
+  store.removeStoryCoreValueAxis(axisId)
+}
+
+function setPrimaryCoreAxis(axisId: string) {
+  store.setPrimaryStoryCoreValueAxis(axisId)
+}
+
+function addNewCoreAxis() {
+  const axis = store.addValueAxis('project', PROJECT_OWNER_ID)
+  store.updateValueAxis(axis.id, {
+    positiveLabel: newCorePositiveLabel.value.trim() || axis.positiveLabel,
+    negativeLabel: newCoreNegativeLabel.value.trim() || axis.negativeLabel,
+  })
+  store.addStoryCoreValueAxis(axis.id)
+  newCorePositiveLabel.value = ''
+  newCoreNegativeLabel.value = ''
+  coreAxisPickerOpen.value = false
 }
 
 function onSeqLabelBlur(actId: string, seqId: string, e: Event) {
@@ -328,22 +358,76 @@ function onSeqLabelBlur(actId: string, seqId: string, e: Event) {
 
           <div class="story-line core-axis-line">
             <span>核心价值冲突是：</span>
-            <div v-if="projectValueAxes.length > 0" class="core-axis-chip-grid">
-              <button
-                v-for="axis in projectValueAxes"
+            <div class="core-axis-selected-list">
+              <div
+                v-for="(axis, index) in selectedCoreAxes"
                 :key="axis.id"
-                class="core-axis-chip"
-                :class="{ selected: isCoreAxisSelected(axis.id) }"
+                class="core-axis-chip selected"
+              >
+                <button
+                  class="core-axis-role"
+                  type="button"
+                  :title="index === 0 ? '主要冲突' : '设为主要冲突'"
+                  @click="setPrimaryCoreAxis(axis.id)"
+                >
+                  {{ index === 0 ? '主' : '次' }}
+                </button>
+                <span class="axis-color" :style="{ background: axis.color }" />
+                <span>{{ axisLabel(axis.id) }}</span>
+                <button
+                  class="core-axis-remove"
+                  type="button"
+                  title="移出核心冲突"
+                  @click="removeCoreAxis(axis.id)"
+                >
+                  ×
+                </button>
+              </div>
+
+              <span v-if="selectedCoreAxes.length === 0" class="core-axis-empty">尚未选择</span>
+
+              <button
+                class="core-axis-add"
                 type="button"
-                :disabled="!isCoreAxisSelected(axis.id) && selectedCoreAxisIds.length >= 5"
-                @click="toggleCoreAxis(axis.id)"
+                :disabled="selectedCoreAxisIds.length >= 5"
+                @click="coreAxisPickerOpen = !coreAxisPickerOpen"
+              >
+                ＋
+              </button>
+            </div>
+            <span class="field-note">1主 + 4次</span>
+
+            <div v-if="coreAxisPickerOpen" class="core-axis-picker-popover">
+              <button
+                v-for="axis in availableCoreAxes"
+                :key="axis.id"
+                class="core-axis-option"
+                type="button"
+                @click="addCoreAxis(axis.id)"
               >
                 <span class="axis-color" :style="{ background: axis.color }" />
                 <span>{{ axisLabel(axis.id) }}</span>
               </button>
+
+              <div v-if="availableCoreAxes.length === 0" class="core-axis-empty">没有可选价值轴</div>
+
+              <div class="new-core-axis-row">
+                <input
+                  v-model="newCorePositiveLabel"
+                  class="new-core-axis-input"
+                  type="text"
+                  placeholder="正价值"
+                />
+                <span>/</span>
+                <input
+                  v-model="newCoreNegativeLabel"
+                  class="new-core-axis-input"
+                  type="text"
+                  placeholder="反价值"
+                />
+                <button class="new-core-axis-btn" type="button" @click="addNewCoreAxis">添加</button>
+              </div>
             </div>
-            <span v-else class="core-axis-empty">尚未添加价值轴</span>
-            <span class="field-note">最多五个</span>
           </div>
 
           <div class="story-line">
@@ -693,8 +777,11 @@ button.tree-row {
 }
 
 .story-inline-input {
+  width: auto;
   min-width: 180px;
-  flex: 1;
+  max-width: 420px;
+  flex: 0 1 auto;
+  field-sizing: content;
   border: none;
   border-bottom: 1px solid #52525b;
   border-radius: 0;
@@ -707,8 +794,8 @@ button.tree-row {
 }
 
 .story-input-xl {
-  min-width: 360px;
-  flex: 1 1 520px;
+  min-width: 220px;
+  max-width: 560px;
 }
 
 .story-inline-input:focus {
@@ -722,19 +809,21 @@ button.tree-row {
 }
 
 .core-axis-line {
+  position: relative;
   align-items: center;
   flex-wrap: wrap;
 }
 
-.core-axis-chip-grid {
+.core-axis-selected-list {
   min-width: 0;
   display: flex;
-  flex: 1;
+  align-items: center;
   flex-wrap: wrap;
   gap: 6px;
 }
 
-.core-axis-chip {
+.core-axis-chip,
+.core-axis-option {
   min-width: 0;
   display: inline-flex;
   align-items: center;
@@ -743,22 +832,72 @@ button.tree-row {
   border-radius: 999px;
   background: #111114;
   color: #a1a1aa;
-  cursor: pointer;
   padding: 3px 8px;
   font-size: 12px;
   transition: all 0.15s;
 }
 
-.core-axis-chip:hover:not(:disabled),
+.core-axis-chip {
+  user-select: none;
+}
+
 .core-axis-chip.selected {
   border-color: rgba(167, 139, 250, 0.68);
   background: rgba(167, 139, 250, 0.12);
   color: #f4f4f5;
 }
 
-.core-axis-chip:disabled {
+.core-axis-option {
+  width: 100%;
+  cursor: pointer;
+}
+
+.core-axis-option:hover {
+  border-color: rgba(167, 139, 250, 0.68);
+  background: rgba(167, 139, 250, 0.12);
+  color: #f4f4f5;
+}
+
+.core-axis-role,
+.core-axis-remove,
+.core-axis-add,
+.new-core-axis-btn {
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  user-select: none;
+}
+
+.core-axis-role {
+  border-radius: 999px;
+  background: rgba(167, 139, 250, 0.2);
+  color: #d8b4fe;
+  padding: 0 5px;
+  font-size: 11px;
+}
+
+.core-axis-remove {
+  color: #71717a;
+  font-size: 13px;
+  line-height: 1;
+}
+
+.core-axis-remove:hover {
+  color: #ef4444;
+}
+
+.core-axis-add {
+  width: 24px;
+  height: 24px;
+  border: 1px dashed #52525b;
+  border-radius: 999px;
+  color: #a78bfa;
+}
+
+.core-axis-add:disabled {
   cursor: not-allowed;
-  opacity: 0.45;
+  opacity: 0.4;
 }
 
 .axis-color {
@@ -771,6 +910,58 @@ button.tree-row {
 .core-axis-empty {
   color: #71717a;
   font-size: 12px;
+}
+
+.core-axis-picker-popover {
+  position: absolute;
+  z-index: 10;
+  top: 30px;
+  left: 112px;
+  width: 300px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border: 1px solid #3f3f46;
+  border-radius: 10px;
+  background: #111114;
+  padding: 8px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.36);
+}
+
+.new-core-axis-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-top: 1px solid #27272a;
+  padding-top: 6px;
+}
+
+.new-core-axis-input {
+  min-width: 0;
+  flex: 1;
+  border: 1px solid #3f3f46;
+  border-radius: 6px;
+  background: #18181b;
+  color: #e4e4e7;
+  outline: none;
+  padding: 4px 6px;
+  font-size: 12px;
+}
+
+.new-core-axis-input:focus {
+  border-color: rgba(167, 139, 250, 0.72);
+}
+
+.new-core-axis-btn {
+  border: 1px solid #3f3f46;
+  border-radius: 6px;
+  padding: 4px 8px;
+  color: #a78bfa;
+  font-size: 12px;
+}
+
+.new-core-axis-btn:hover {
+  border-color: rgba(167, 139, 250, 0.68);
 }
 
 .counter-idea-block {
