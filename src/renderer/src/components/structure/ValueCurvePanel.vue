@@ -194,19 +194,20 @@ onBeforeUnmount(stopPointDrag)
       </div>
 
       <div class="axis-chip-grid">
-        <button
+        <div
           v-for="axis in externalAxes"
           :key="axis.id"
           class="axis-chip"
           :class="{ active: activeAxisId === axis.id, visible: isAxisVisible(axis.id) }"
-          type="button"
-          @click="toggleAxis(axis)"
-          @dblclick.stop="selectAxis(axis)"
         >
-          <span class="check-mark">{{ isAxisVisible(axis.id) ? '✓' : '' }}</span>
-          <span class="axis-color" :style="{ background: axis.color }" />
-          <span class="axis-chip-label">{{ axisLabel(axis) }}</span>
-        </button>
+          <button class="axis-toggle" type="button" @click.stop="toggleAxis(axis)">
+            {{ isAxisVisible(axis.id) ? '✓' : '' }}
+          </button>
+          <button class="axis-select" type="button" @click="selectAxis(axis)">
+            <span class="axis-color" :style="{ background: axis.color }" />
+            <span class="axis-chip-label">{{ axisLabel(axis) }}</span>
+          </button>
+        </div>
 
         <button
           v-if="drawerAxes.length > 0"
@@ -221,17 +222,18 @@ onBeforeUnmount(stopPointDrag)
       <div v-if="drawerOpen" class="axis-drawer">
         <div class="axis-chip-grid drawer-chip-grid">
           <div v-for="axis in drawerAxes" :key="axis.id" class="drawer-chip-wrap">
-            <button
+            <div
               class="axis-chip drawer-axis-chip"
               :class="{ active: activeAxisId === axis.id, visible: isAxisVisible(axis.id) }"
-              type="button"
-              @click="toggleAxis(axis)"
-              @dblclick.stop="selectAxis(axis)"
             >
-              <span class="check-mark">{{ isAxisVisible(axis.id) ? '✓' : '' }}</span>
-              <span class="axis-color" :style="{ background: axis.color }" />
-              <span class="axis-chip-label">{{ axisLabel(axis) }}</span>
-            </button>
+              <button class="axis-toggle" type="button" @click.stop="toggleAxis(axis)">
+                {{ isAxisVisible(axis.id) ? '✓' : '' }}
+              </button>
+              <button class="axis-select" type="button" @click="selectAxis(axis)">
+                <span class="axis-color" :style="{ background: axis.color }" />
+                <span class="axis-chip-label">{{ axisLabel(axis) }}</span>
+              </button>
+            </div>
             <div class="drawer-order-actions">
               <button class="order-btn" type="button" @click="store.moveValueAxis(axis.id, 'up')">↑</button>
               <button class="order-btn" type="button" @click="store.moveValueAxis(axis.id, 'down')">↓</button>
@@ -414,13 +416,11 @@ h2 {
   height: 28px;
   display: inline-flex;
   align-items: center;
-  gap: 5px;
   border: 1px solid #3f3f46;
   border-radius: 999px;
   background: #111114;
   color: #71717a;
-  cursor: pointer;
-  padding: 0 8px;
+  overflow: hidden;
   font-size: 12px;
   transition: all 0.15s;
 }
@@ -435,16 +435,35 @@ h2 {
   box-shadow: 0 0 0 1px rgba(167, 139, 250, 0.15);
 }
 
+.axis-toggle,
+.axis-select {
+  height: 100%;
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.axis-toggle {
+  width: 30px;
+  flex-shrink: 0;
+  color: #a78bfa;
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.axis-select {
+  min-width: 0;
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 8px 0 7px;
+}
+
 .axis-chip-label {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.check-mark {
-  width: 12px;
-  color: #a78bfa;
-  text-align: center;
 }
 
 .axis-color {
