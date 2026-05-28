@@ -126,7 +126,13 @@ watchEffect(() => {
 })
 
 onBeforeUnmount(() => {
-  if (saveTimer) clearTimeout(saveTimer)
+  if (saveTimer) {
+    clearTimeout(saveTimer)
+    saveTimer = null
+  }
+  if (editor.value) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(editor.value.getJSON()))
+  }
   lineGridStore.reset()
   editorBridge.unregister()
   editor.value?.destroy()

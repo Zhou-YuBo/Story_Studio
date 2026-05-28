@@ -81,13 +81,14 @@ export function useCursorStructureContext(): CursorStructureContext {
       updateFromEditor(editor)
     }
 
+    const editorDom = editor.view.dom
     editor.on('transaction', update)
-    editor.view.dom.addEventListener('pointerdown', activateAndUpdate)
-    editor.view.dom.addEventListener('keyup', activateAndUpdate)
+    editorDom.addEventListener('pointerdown', activateAndUpdate)
+    editorDom.addEventListener('keyup', activateAndUpdate)
     cleanupEditorListener = () => {
       editor.off('transaction', update)
-      editor.view.dom.removeEventListener('pointerdown', activateAndUpdate)
-      editor.view.dom.removeEventListener('keyup', activateAndUpdate)
+      editorDom.removeEventListener('pointerdown', activateAndUpdate)
+      editorDom.removeEventListener('keyup', activateAndUpdate)
     }
     resetContext()
   }
@@ -98,7 +99,10 @@ export function useCursorStructureContext(): CursorStructureContext {
     { immediate: true },
   )
 
-  watch(snapshot, () => updateFromEditor(bridge.editor))
+  watch(snapshot, () => {
+    if (!cursorActivated) return
+    updateFromEditor(bridge.editor)
+  })
 
   onBeforeUnmount(() => {
     if (cleanupEditorListener) cleanupEditorListener()
