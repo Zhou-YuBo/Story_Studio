@@ -24,6 +24,13 @@ export class FileProjectRepository {
     return createDefaultProjectDocument()
   }
 
+  async loadFromPath(filePath: string): Promise<ProjectDocument> {
+    const raw = await readFile(filePath, 'utf-8')
+    const document = normalizeProjectDocument(JSON.parse(raw))
+    this.projectFile = filePath
+    return document
+  }
+
   async save(
     document: ProjectDocument,
     owner?: BrowserWindow | null

@@ -18,7 +18,7 @@ async function bootstrap(): Promise<void> {
   app.use(router)
   app.use(pinia)
 
-  await useProjectStore(pinia).hydrate()
+  // hydrate is now deferred until the user selects a project in ProjectHallView
 
   window.addEventListener('beforeunload', () => {
     void useProjectStore(pinia).flushSave()

@@ -9,7 +9,13 @@ const api: AppApi = {
     save: (document: ProjectDocument) => ipcRenderer.invoke('project:save', document),
     saveAs: (document: ProjectDocument) => ipcRenderer.invoke('project:save-as', document),
     importJson: () => ipcRenderer.invoke('project:import-json'),
-    getInfo: () => ipcRenderer.invoke('project:get-info')
+    getInfo: () => ipcRenderer.invoke('project:get-info'),
+    openFromPath: (filePath: string) => ipcRenderer.invoke('project:open-from-path', filePath)
+  },
+  recent: {
+    get: () => ipcRenderer.invoke('recent:get'),
+    add: (projectPath: string, title: string) => ipcRenderer.invoke('recent:add', projectPath, title),
+    remove: (projectPath: string) => ipcRenderer.invoke('recent:remove', projectPath)
   }
 }
 

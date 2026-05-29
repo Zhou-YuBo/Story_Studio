@@ -102,11 +102,29 @@ export interface ProjectApi {
   saveAs(document: ProjectDocument): Promise<ProjectSaveResult>
   importJson(): Promise<ProjectImportResult>
   getInfo(): Promise<ProjectInfo>
+  openFromPath(filePath: string): Promise<ProjectOpenFromPathResult>
 }
 
 export interface AppApi {
   project: ProjectApi
+  recent: RecentApi
 }
+
+export interface RecentProjectEntry {
+  projectPath: string
+  title: string
+  lastOpenedAt: string
+}
+
+export interface RecentApi {
+  get(): Promise<RecentProjectEntry[]>
+  add(projectPath: string, title: string): Promise<void>
+  remove(projectPath: string): Promise<void>
+}
+
+export type ProjectOpenFromPathResult =
+  | { ok: true; document: ProjectDocument; projectPath: string; assetsPath: string | null }
+  | { ok: false; error: string }
 
 const DEFAULT_SCENE_DOC: Record<string, unknown> = {
   type: 'doc',

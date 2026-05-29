@@ -3,6 +3,7 @@ import type {
   ProjectDocument,
   ProjectImportResult,
   ProjectLoadResult,
+  ProjectOpenFromPathResult,
   ProjectSaveResult
 } from '../shared/project'
 import { createDefaultProjectDocument } from '../shared/project'
@@ -86,4 +87,22 @@ export function registerProjectIpc(repository: FileProjectRepository): void {
   })
 
   ipcMain.handle('project:get-info', async () => repository.getInfo())
+
+  ipcMain.handle(
+    'project:open-from-path',
+    async (_, filePath: string): Promise<ProjectOpenFromPathResult> => {
+      try {
+        const document = await repository.loadFromPath(filePath)
+        const info = await repository.getInfo()
+        return {
+          ok: true,
+          document,
+          projectPath: info.projectPath ?? filePath,
+          assetsPath: info.assetsPath
+        }
+      } catch (error) {
+        return { ok: false, error: error instanceof Error ? error.message : '项目打开失败' }
+      }
+    }
+  )
 }

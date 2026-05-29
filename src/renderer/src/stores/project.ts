@@ -12,6 +12,7 @@ import { useCharacterCastUniverseStore } from './characterCastUniverse'
 import { useCharacterRelationshipStore } from './characterRelationship'
 import { useEditorBridge } from './editor-bridge'
 import { useInspirationStore } from './inspiration'
+import { useRecentStore } from './recent'
 import { useReminderStore } from './reminder'
 import { useStructureStore } from './structure'
 import { useWorldStore } from './world'
@@ -58,6 +59,39 @@ export const useProjectStore = defineStore('project', () => {
       savePending = false
       hydrated.value = true
       hasUnsavedChanges.value = false
+    } finally {
+      isHydrating.value = false
+    }
+  }
+
+  async function hydrateNew(): Promise<void> {
+    if (hydrated.value || isHydrating.value) return
+    applyDocument(createDefaultProjectDocument())
+    hydrated.value = true
+    hasUnsavedChanges.value = true
+  }
+
+  async function openFromPath(filePath: string): Promise<boolean> {
+    if (isHydrating.value) return false
+    isHydrating.value = true
+    try {
+      const result = await window.api.project.openFromPath(filePath)
+      if (!result.ok) {
+        lastError.value = result.error
+        return false
+      }
+      projectPath.value = result.projectPath
+      assetsPath.value = result.assetsPath
+      lastSavedAt.value = result.document.updatedAt
+      applyDocument(result.document)
+      savePending = false
+      hydrated.value = true
+      hasUnsavedChanges.value = false
+      lastError.value = null
+      return true
+    } catch (error) {
+      lastError.value = error instanceof Error ? error.message : '项目打开失败'
+      return false
     } finally {
       isHydrating.value = false
     }
@@ -148,14 +182,14 @@ export const useProjectStore = defineStore('project', () => {
     await runSave(() => window.api.project.saveAs(toProjectDocument()))
   }
 
-  async function importJson(): Promise<void> {
-    if (isHydrating.value) return
+  async function importJson(): Promise<boolean> {
+    if (isHydrating.value) return false
     isHydrating.value = true
     try {
       const result = await window.api.project.importJson()
       if (!result.ok) {
         if (!result.canceled) lastError.value = result.error
-        return
+        return false
       }
       projectPath.value = result.projectPath
       assetsPath.value = result.assetsPath
@@ -165,8 +199,10 @@ export const useProjectStore = defineStore('project', () => {
       hasUnsavedChanges.value = false
       lastError.value = null
       hydrated.value = true
+      return true
     } catch (error) {
       lastError.value = error instanceof Error ? error.message : '项目导入失败'
+      return false
     } finally {
       isHydrating.value = false
     }
@@ -207,6 +243,9 @@ export const useProjectStore = defineStore('project', () => {
         lastSavedAt.value = result.document.updatedAt
         hasUnsavedChanges.value = false
         lastError.value = null
+        if (result.projectPath) {
+          void useRecentStore().add(result.projectPath, title.value)
+        }
       })
       .catch((error) => {
         savePending = false
@@ -238,6 +277,8 @@ export const useProjectStore = defineStore('project', () => {
     hasUnsavedChanges,
     needsSaveLocation,
     hydrate,
+    hydrateNew,
+    openFromPath,
     scheduleSave,
     flushSave,
     saveNow,
