@@ -5,6 +5,7 @@ import { storeToRefs } from 'pinia'
 import '@vue-flow/core/dist/style.css'
 import '@vue-flow/core/dist/theme-default.css'
 import { useInspirationStore, type InspirationItem } from '../stores/inspiration'
+import { useProjectStore } from '../stores/project'
 import { useCanvasHistory } from '../composables/useCanvasHistory'
 import { canvasHistoryKey, type CanvasHistoryHandle } from '../composables/canvasHistoryKey'
 import { useRightClickConnect } from '../composables/useRightClickConnect'
@@ -316,7 +317,27 @@ function formatDateTime(iso: string): string {
 }
 
 // ---- 文件导入 ----
+const projectStore = useProjectStore()
+
+async function ensureProjectSaved(): Promise<boolean> {
+  if (!projectStore.needsSaveLocation) return true
+  await projectStore.saveAs()
+  return !projectStore.needsSaveLocation
+}
+
+function getFilePathsFromDrop(event: DragEvent): string[] {
+  const files = event.dataTransfer?.files
+  if (!files) return []
+  const paths: string[] = []
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i] as (File & { path?: string })
+    if (file.path) paths.push(file.path)
+  }
+  return paths
+}
+
 async function handleImportFiles() {
+  if (!(await ensureProjectSaved())) return
   await store.importFiles()
 }
 
@@ -325,28 +346,20 @@ function hasExternalFiles(event: DragEvent): boolean {
 }
 
 async function onPanelDrop(event: DragEvent) {
-  if (hasExternalFiles(event)) {
-    event.preventDefault()
-    const files = event.dataTransfer!.files
-    const paths: string[] = []
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i] as (File & { path?: string })
-      if (file.path) paths.push(file.path)
-    }
-    if (paths.length > 0) await store.importPaths(paths)
-  }
+  if (!hasExternalFiles(event)) return
+  event.preventDefault()
+  const paths = getFilePathsFromDrop(event)
+  if (paths.length === 0) return
+  if (!(await ensureProjectSaved())) return
+  await store.importPaths(paths)
 }
 
 async function onCanvasExternalDrop(event: DragEvent) {
   if (!hasExternalFiles(event) || !vueFlowRef.value) return
   event.preventDefault()
-  const files = event.dataTransfer!.files
-  const paths: string[] = []
-  for (let i = 0; i < files.length; i++) {
-    const file = files[i] as (File & { path?: string })
-    if (file.path) paths.push(file.path)
-  }
+  const paths = getFilePathsFromDrop(event)
   if (paths.length === 0) return
+  if (!(await ensureProjectSaved())) return
 
   const items = await store.importPaths(paths)
   if (items.length === 0) return

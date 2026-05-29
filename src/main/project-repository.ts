@@ -46,19 +46,24 @@ export class FileProjectRepository {
     owner?: BrowserWindow | null
   ): Promise<ProjectDocument | null> {
     await mkdir(this.defaultDir, { recursive: true })
+    const safeName = sanitizeFileName(document.title || '未命名项目')
     const options: SaveDialogOptions = {
       title: '保存 Story Studio 项目',
-      defaultPath: join(
-        this.defaultDir,
-        `${sanitizeFileName(document.title || '未命名项目')}.story.json`
-      ),
+      defaultPath: join(this.defaultDir, `${safeName}.story.json`),
       filters: PROJECT_FILTER
     }
     const result = owner
       ? await dialog.showSaveDialog(owner, options)
       : await dialog.showSaveDialog(options)
     if (result.canceled || !result.filePath) return null
-    this.projectFile = result.filePath
+
+    const chosenDir = dirname(result.filePath)
+    const chosenName = basename(result.filePath, '.story.json').replace(/\.json$/, '')
+    const projectDir = join(chosenDir, chosenName)
+    const jsonPath = join(projectDir, `${chosenName}.story.json`)
+
+    await mkdir(projectDir, { recursive: true })
+    this.projectFile = jsonPath
     return this.writeToCurrentFile(document)
   }
 
@@ -115,8 +120,8 @@ export class FileProjectRepository {
   }
 
   getAssetsDir(): string {
-    const projectDir = this.projectFile ? dirname(this.projectFile) : this.defaultDir
-    return join(projectDir, 'assets')
+    if (!this.projectFile) throw new Error('项目尚未保存，无法管理素材文件')
+    return join(dirname(this.projectFile), 'assets')
   }
 
   async importAsset(sourcePath: string): Promise<ImportedAsset> {
