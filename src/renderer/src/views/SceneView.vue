@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import SceneEditor from '../components/editor/SceneEditor.vue'
 import StructureStrip from '../components/structure/StructureStrip.vue'
+import SceneTopBar from '../components/structure/SceneTopBar.vue'
 import BeatBoard from '../components/beat/BeatBoard.vue'
 </script>
 
 <template>
   <div class="flex-1 flex flex-col overflow-hidden">
-    <div id="scene-topbar" class="scene-topbar" />
+    <SceneTopBar />
     <div class="flex flex-1 overflow-hidden">
       <aside class="scene-left-panel">
         <StructureStrip />
@@ -22,13 +23,6 @@ import BeatBoard from '../components/beat/BeatBoard.vue'
 </template>
 
 <style scoped>
-.scene-topbar {
-  height: 140px;
-  flex-shrink: 0;
-  border-bottom: 1px solid #27272a;
-  background: #09090b;
-}
-
 .scene-left-panel {
   flex: 1;
   background: #18181b;

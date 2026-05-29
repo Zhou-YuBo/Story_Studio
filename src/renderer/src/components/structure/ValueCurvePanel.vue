@@ -1,16 +1,11 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, toRef, watch } from 'vue'
 import {
   type StructureOwnerType,
   type ValueAxis,
   useStructureStore,
 } from '../../stores/structure'
-
-interface CurveTarget {
-  id: string
-  type: StructureOwnerType
-  label: string
-}
+import { useValueCurve, type CurveTarget, type CurveChartConfig } from '../../composables/useValueCurve'
 
 const props = defineProps<{
   ownerType: StructureOwnerType
@@ -21,65 +16,42 @@ const props = defineProps<{
 }>()
 
 const AXIS_SLOT_COUNT = 14
-const CHART_WIDTH = 720
-const CHART_LEFT = 142
-const CHART_RIGHT = 32
-const CHART_TOP = 34
-const CHART_HEIGHT = 168
+const FULL_CHART: CurveChartConfig = {
+  width: 720,
+  left: 142,
+  right: 32,
+  top: 34,
+  height: 168,
+}
+const CHART_BOTTOM = FULL_CHART.top + FULL_CHART.height
+const CHART_MID = FULL_CHART.top + FULL_CHART.height / 2
+const CHART_RIGHT_EDGE = FULL_CHART.width - FULL_CHART.right
+const CHART_VIEW_H = CHART_BOTTOM + 58
 
 const store = useStructureStore()
 const drawerOpen = ref(false)
 const activeAxisId = ref('')
 const draggingPoint = ref<{ axisId: string; target: CurveTarget } | null>(null)
 
-const axes = computed(() => store.getValueAxesForOwner(props.ownerType, props.ownerId))
-const visibleAxisIds = computed(() => store.getVisibleAxisIds(props.ownerType, props.ownerId))
+const ownerTypeRef = toRef(props, 'ownerType')
+const ownerIdRef = toRef(props, 'ownerId')
+const targetsRef = toRef(props, 'targets')
+
+const {
+  axes,
+  visibleAxisIds,
+  displayedAxes,
+  yToValue,
+  tickPositions,
+  curveSeries,
+} = useValueCurve(ownerTypeRef, ownerIdRef, targetsRef, FULL_CHART)
+
 const externalAxes = computed(() => {
   const limit = axes.value.length > AXIS_SLOT_COUNT ? AXIS_SLOT_COUNT - 1 : AXIS_SLOT_COUNT
   return axes.value.slice(0, limit)
 })
 const drawerAxes = computed(() => axes.value.slice(externalAxes.value.length))
-const displayedAxes = computed(() =>
-  axes.value.filter((axis) => visibleAxisIds.value.includes(axis.id)),
-)
 const activeAxis = computed(() => axes.value.find((axis) => axis.id === activeAxisId.value))
-
-const tickPositions = computed(() => {
-  const chartWidth = CHART_WIDTH - CHART_LEFT - CHART_RIGHT
-
-  return props.targets.map((target, index) => ({
-    ...target,
-    x:
-      props.targets.length === 1
-        ? CHART_LEFT + chartWidth / 2
-        : CHART_LEFT + (chartWidth * index) / (props.targets.length - 1),
-  }))
-})
-
-function valueToY(value: number): number {
-  return CHART_TOP + CHART_HEIGHT / 2 - (value / 100) * (CHART_HEIGHT / 2)
-}
-
-function yToValue(y: number): number {
-  const raw = ((CHART_TOP + CHART_HEIGHT / 2 - y) / (CHART_HEIGHT / 2)) * 100
-  return Math.max(-100, Math.min(100, Math.round(raw)))
-}
-
-const curveSeries = computed(() =>
-  displayedAxes.value.map((axis) => {
-    const points = tickPositions.value.map((tick) => ({
-      target: tick,
-      x: tick.x,
-      y: valueToY(store.getValuePoint(axis.id, tick.id)),
-      value: store.getValuePoint(axis.id, tick.id),
-    }))
-    const path = points
-      .map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`)
-      .join(' ')
-
-    return { axis, path, points }
-  }),
-)
 
 const legendSeries = computed(() => curveSeries.value.slice(0, 6))
 const hiddenLegendCount = computed(() => Math.max(0, curveSeries.value.length - legendSeries.value.length))
@@ -111,7 +83,7 @@ watch(axes, (items) => {
   }
 })
 
-function axisLabel(axis: ValueAxis): string {
+function axisLabel(axis: { positiveLabel: string; negativeLabel: string }): string {
   return `${axis.positiveLabel} / ${axis.negativeLabel}`
 }
 
@@ -150,7 +122,7 @@ function setPointFromClientY(axisId: string, target: CurveTarget, clientY: numbe
   if (!svg) return
 
   const rect = svg.getBoundingClientRect()
-  const y = ((clientY - rect.top) / rect.height) * 260
+  const y = ((clientY - rect.top) / rect.height) * CHART_VIEW_H
   store.setValuePoint(axisId, target.type, target.id, yToValue(y))
 }
 
@@ -247,7 +219,7 @@ onBeforeUnmount(stopPointDrag)
       <svg
         v-if="targets.length > 0 && displayedAxes.length > 0"
         class="curve-svg"
-        viewBox="0 0 720 260"
+        :viewBox="`0 0 720 ${CHART_VIEW_H}`"
         role="img"
         aria-label="价值曲线"
       >
@@ -255,30 +227,30 @@ onBeforeUnmount(stopPointDrag)
           <g v-for="(series, index) in legendSeries" :key="series.axis.id">
             <line
               x1="18"
-              :y1="CHART_TOP + 16 + index * 18"
+              :y1="FULL_CHART.top + 16 + index * 18"
               x2="38"
-              :y2="CHART_TOP + 16 + index * 18"
+              :y2="FULL_CHART.top + 16 + index * 18"
               :stroke="series.axis.color"
               class="legend-line"
             />
-            <text x="46" :y="CHART_TOP + 20 + index * 18" class="legend-text">
+            <text x="46" :y="FULL_CHART.top + 20 + index * 18" class="legend-text">
               {{ axisLabel(series.axis) }}
             </text>
           </g>
-          <text v-if="hiddenLegendCount > 0" x="46" :y="CHART_TOP + 20 + legendSeries.length * 18" class="legend-more">
+          <text v-if="hiddenLegendCount > 0" x="46" :y="FULL_CHART.top + 20 + legendSeries.length * 18" class="legend-more">
             +{{ hiddenLegendCount }}
           </text>
         </g>
 
-        <line :x1="CHART_LEFT" y1="34" :x2="CHART_LEFT" y2="202" class="axis-line" />
-        <line :x1="CHART_LEFT" y1="202" x2="688" y2="202" class="axis-line" />
-        <line :x1="CHART_LEFT" y1="118" x2="688" y2="118" class="center-line" />
-        <line :x1="CHART_LEFT" y1="62" x2="688" y2="62" class="grid-line" />
-        <line :x1="CHART_LEFT" y1="174" x2="688" y2="174" class="grid-line" />
+        <line :x1="FULL_CHART.left" :y1="FULL_CHART.top" :x2="FULL_CHART.left" :y2="CHART_BOTTOM" class="axis-line" />
+        <line :x1="FULL_CHART.left" :y1="CHART_BOTTOM" :x2="CHART_RIGHT_EDGE" :y2="CHART_BOTTOM" class="axis-line" />
+        <line :x1="FULL_CHART.left" :y1="CHART_MID" :x2="CHART_RIGHT_EDGE" :y2="CHART_MID" class="center-line" />
+        <line :x1="FULL_CHART.left" :y1="FULL_CHART.top + FULL_CHART.height * 1/6" :x2="CHART_RIGHT_EDGE" :y2="FULL_CHART.top + FULL_CHART.height * 1/6" class="grid-line" />
+        <line :x1="FULL_CHART.left" :y1="FULL_CHART.top + FULL_CHART.height * 5/6" :x2="CHART_RIGHT_EDGE" :y2="FULL_CHART.top + FULL_CHART.height * 5/6" class="grid-line" />
 
         <g v-for="tick in tickPositions" :key="tick.id">
-          <line :x1="tick.x" y1="34" :x2="tick.x" y2="202" class="tick-line" />
-          <text :x="tick.x" y="230" text-anchor="middle" class="tick-label">
+          <line :x1="tick.x" :y1="FULL_CHART.top" :x2="tick.x" :y2="CHART_BOTTOM" class="tick-line" />
+          <text :x="tick.x" :y="CHART_BOTTOM + 28" text-anchor="middle" class="tick-label">
             {{ tick.label }}
           </text>
         </g>
