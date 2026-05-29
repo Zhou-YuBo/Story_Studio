@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
+import { useRoute } from 'vue-router'
 import ValueCurvePanel from '../components/structure/ValueCurvePanel.vue'
 import {
   PROJECT_OWNER_ID,
@@ -20,7 +21,42 @@ type SelectedNode =
   | { type: 'scene'; actId: string; seqId: string; sceneId: string }
 
 const store = useStructureStore()
+const route = useRoute()
 const selectedNode = ref<SelectedNode>({ type: 'project' })
+
+function applyRouteQuery() {
+  const { ownerType, ownerId, actId } = route.query
+  if (ownerType === 'project') {
+    selectedNode.value = { type: 'project' }
+    return
+  }
+
+  const oid = (ownerId as string) ?? ''
+
+  if (ownerType === 'act' && oid) {
+    if (store.acts.some((a) => a.id === oid)) {
+      selectedNode.value = { type: 'act', actId: oid }
+      return
+    }
+  }
+
+  if (ownerType === 'sequence' && oid) {
+    const aid = (actId as string) ?? ''
+    const act = store.acts.find((a) => a.id === aid && a.sequences.some((s) => s.id === oid))
+    if (act) {
+      selectedNode.value = { type: 'sequence', actId: aid, seqId: oid }
+      return
+    }
+  }
+
+  // fallback
+  selectedNode.value = { type: 'project' }
+}
+
+onMounted(() => {
+  applyRouteQuery()
+})
+
 const counterIdeaOpen = ref(false)
 const coreAxisPickerOpen = ref(false)
 const newCorePositiveLabel = ref('')

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch, onBeforeUnmount } from 'vue'
 import { storeToRefs } from 'pinia'
+import { useRouter } from 'vue-router'
 import { useEditorBridge } from '../../stores/editor-bridge'
 import { useLineGridStore } from '../../stores/line-grid'
 import { useStructureStore, PROJECT_OWNER_ID, type StructureOwnerType } from '../../stores/structure'
@@ -20,6 +21,7 @@ const COMPACT_CHART: CurveChartConfig = {
 const bridge = useEditorBridge()
 const lineGrid = useLineGridStore()
 const store = useStructureStore()
+const router = useRouter()
 const { snapshot } = storeToRefs(lineGrid)
 
 const selectedLevel = ref<TopBarLevel>('project')
@@ -142,6 +144,27 @@ const isFallingBack = computed(() => {
   return resolvedLevel.value.ownerType !== 'sequence'
 })
 
+function findActIdForSeq(seqId: string): string {
+  for (const act of store.acts) {
+    if (act.sequences.some((s) => s.id === seqId)) return act.id
+  }
+  return ''
+}
+
+function goToStructure() {
+  const { ownerType, ownerId } = resolvedLevel.value
+  const query: Record<string, string> = { ownerType }
+
+  if (ownerType !== 'project') {
+    query.ownerId = ownerId
+  }
+  if (ownerType === 'sequence') {
+    query.actId = findActIdForSeq(ownerId)
+  }
+
+  router.push({ path: '/structure', query })
+}
+
 function scrollToTarget(target: CurveTarget) {
   const scrollEl = bridge.scrollEl
   if (!scrollEl) return
@@ -227,6 +250,10 @@ const svgViewBoxH = COMPACT_CHART.top + COMPACT_CHART.height + 42
       </div>
       <span class="topbar-owner-label">{{ resolvedLevel.label }}</span>
       <span v-if="isFallingBack" class="topbar-fallback-hint">（回退）</span>
+      <div class="topbar-spacer" />
+      <button class="topbar-goto-btn" title="在结构工作台中编辑此价值曲线" @click="goToStructure">
+        结构工作台
+      </button>
     </div>
 
     <div class="topbar-body">
@@ -375,6 +402,28 @@ const svgViewBoxH = COMPACT_CHART.top + COMPACT_CHART.height + 42
 .topbar-fallback-hint {
   color: #52525b;
   font-size: 10px;
+}
+
+.topbar-spacer {
+  flex: 1;
+}
+
+.topbar-goto-btn {
+  border: 1px solid #3f3f46;
+  border-radius: 5px;
+  background: transparent;
+  color: #a78bfa;
+  cursor: pointer;
+  padding: 3px 10px;
+  font-size: 11px;
+  flex-shrink: 0;
+  transition: all 0.15s;
+}
+
+.topbar-goto-btn:hover {
+  background: rgba(167, 139, 250, 0.12);
+  border-color: rgba(167, 139, 250, 0.5);
+  color: #d8b4fe;
 }
 
 /* 主体：曲线 + 图例 */
