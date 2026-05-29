@@ -411,14 +411,15 @@ function onPickerKeydown(e: KeyboardEvent): void {
 /* 编辑区域：滚动容器 */
 .editor-scroll {
   flex: 1;
-  overflow-y: auto;
+  overflow: auto;
   background: #2a2a2a;
   padding: 20px 0;
 }
 
 /* 白色页面容器 */
 .page-container {
-  width: 100%;
+  box-sizing: border-box;
+  width: var(--page-width);
   min-height: var(--page-height);
   background: var(--page-background);
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
