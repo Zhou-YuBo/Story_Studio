@@ -22,6 +22,8 @@ const counterIdeaOpen = ref(false)
 const coreAxisPickerOpen = ref(false)
 const newCorePositiveLabel = ref('')
 const newCoreNegativeLabel = ref('')
+const editingLabelKey = ref('')
+const editingLabelDraft = ref('')
 
 const selectedAct = computed(() => {
   const node = selectedNode.value
@@ -158,8 +160,57 @@ function onActColorChange(actId: string, e: Event) {
   store.updateActColor(actId, (e.target as HTMLInputElement).value)
 }
 
-function onActLabelBlur(actId: string, e: Event) {
-  store.updateActLabel(actId, (e.target as HTMLInputElement).value)
+function labelEditKey(type: 'act' | 'sequence', id: string) {
+  return `${type}:${id}`
+}
+
+function isEditingLabel(type: 'act' | 'sequence', id: string) {
+  return editingLabelKey.value === labelEditKey(type, id)
+}
+
+function startActLabelEdit(actId: string, label: string) {
+  editingLabelKey.value = labelEditKey('act', actId)
+  editingLabelDraft.value = label
+}
+
+function startSequenceLabelEdit(seqId: string, label: string) {
+  editingLabelKey.value = labelEditKey('sequence', seqId)
+  editingLabelDraft.value = label
+}
+
+function commitLabelEdit() {
+  const key = editingLabelKey.value
+  const label = editingLabelDraft.value.trim()
+  if (!key) return
+
+  const [type, id] = key.split(':')
+  if (type === 'act') {
+    store.updateActLabel(id, label || selectedAct.value?.label || '未命名幕')
+  }
+
+  if (type === 'sequence') {
+    const act = store.acts.find((item) => item.sequences.some((seq) => seq.id === id))
+    const seq = act?.sequences.find((item) => item.id === id)
+    if (act && seq) store.updateSequenceLabel(act.id, id, label || seq.label || '未命名序列')
+  }
+
+  editingLabelKey.value = ''
+  editingLabelDraft.value = ''
+}
+
+function cancelLabelEdit() {
+  editingLabelKey.value = ''
+  editingLabelDraft.value = ''
+}
+
+function onLabelEditKeydown(e: KeyboardEvent) {
+  if (e.key === 'Enter') {
+    ;(e.target as HTMLInputElement).blur()
+  }
+
+  if (e.key === 'Escape') {
+    cancelLabelEdit()
+  }
 }
 
 function onSeqColorChange(actId: string, seqId: string, e: Event) {
@@ -211,9 +262,6 @@ function addNewCoreAxis() {
   coreAxisPickerOpen.value = false
 }
 
-function onSeqLabelBlur(actId: string, seqId: string, e: Event) {
-  store.updateSequenceLabel(actId, seqId, (e.target as HTMLInputElement).value)
-}
 </script>
 
 <template>
@@ -256,14 +304,23 @@ function onSeqLabelBlur(actId: string, seqId: string, e: Event) {
               @input="onActColorChange(act.id, $event)"
             />
             <input
+              v-if="isEditingLabel('act', act.id)"
+              v-model="editingLabelDraft"
               type="text"
-              :value="act.label"
               class="label-input act-label-input"
+              autofocus
               @click.stop
-              @focus="selectAct(act.id)"
-              @blur="onActLabelBlur(act.id, $event)"
-              @keydown.enter="($event.target as HTMLInputElement).blur()"
+              @blur="commitLabelEdit"
+              @keydown="onLabelEditKeydown"
             />
+            <span
+              v-else
+              class="tree-label editable-label act-text-label"
+              title="双击修改标题"
+              @dblclick.stop="startActLabelEdit(act.id, act.label)"
+            >
+              {{ act.label }}
+            </span>
             <button
               class="remove-btn"
               type="button"
@@ -290,14 +347,23 @@ function onSeqLabelBlur(actId: string, seqId: string, e: Event) {
                 @input="onSeqColorChange(act.id, seq.id, $event)"
               />
               <input
+                v-if="isEditingLabel('sequence', seq.id)"
+                v-model="editingLabelDraft"
                 type="text"
-                :value="seq.label"
                 class="label-input seq-label-input"
+                autofocus
                 @click.stop
-                @focus="selectSequence(act.id, seq.id)"
-                @blur="onSeqLabelBlur(act.id, seq.id, $event)"
-                @keydown.enter="($event.target as HTMLInputElement).blur()"
+                @blur="commitLabelEdit"
+                @keydown="onLabelEditKeydown"
               />
+              <span
+                v-else
+                class="tree-label editable-label seq-text-label"
+                title="双击修改标题"
+                @dblclick.stop="startSequenceLabelEdit(seq.id, seq.label)"
+              >
+                {{ seq.label }}
+              </span>
               <button
                 class="remove-btn remove-btn-sm"
                 type="button"
@@ -684,6 +750,29 @@ button.tree-row {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.editable-label {
+  min-width: 0;
+  flex: 1;
+  border-radius: 4px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.editable-label:hover {
+  color: #f4f4f5;
+}
+
+.act-text-label {
+  padding: 4px 6px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.seq-text-label {
+  padding: 3px 6px;
+  font-size: 13px;
 }
 
 .empty-hint {
