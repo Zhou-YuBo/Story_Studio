@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { computed, ref } from 'vue'
+import { computed, ref, toRaw } from 'vue'
 import {
   createDefaultProjectDocument,
   type ProjectAssetItem,
@@ -78,10 +78,14 @@ export const useProjectStore = defineStore('project', () => {
     useWorldStore().hydrateFromProject(document.world)
   }
 
+  function cloneForIpc<T>(value: T): T {
+    return JSON.parse(JSON.stringify(toRaw(value))) as T
+  }
+
   function toProjectDocument(): ProjectDocument {
     const now = new Date().toISOString()
 
-    return {
+    return cloneForIpc({
       schemaVersion: 1,
       projectId: projectId.value,
       title: title.value,
@@ -100,7 +104,7 @@ export const useProjectStore = defineStore('project', () => {
       assets: {
         items: assets.value
       }
-    }
+    })
   }
 
   function setSceneDoc(doc: Record<string, unknown>): void {
@@ -184,6 +188,7 @@ export const useProjectStore = defineStore('project', () => {
     saveInFlight = saveRequest()
       .then((result) => {
         if (!result.ok) {
+          savePending = false
           if (!result.canceled) lastError.value = result.error
           return
         }
@@ -194,6 +199,7 @@ export const useProjectStore = defineStore('project', () => {
         lastError.value = null
       })
       .catch((error) => {
+        savePending = false
         lastError.value = error instanceof Error ? error.message : '项目保存失败'
       })
       .finally(() => {

@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron'
+import { BrowserWindow, ipcMain } from 'electron'
 import type {
   ProjectDocument,
   ProjectImportResult,
@@ -27,9 +27,12 @@ export function registerProjectIpc(repository: FileProjectRepository): void {
 
   ipcMain.handle(
     'project:save',
-    async (_, document: ProjectDocument): Promise<ProjectSaveResult> => {
+    async (event, document: ProjectDocument): Promise<ProjectSaveResult> => {
       try {
-        const savedDocument = await repository.save(document)
+        const savedDocument = await repository.save(
+          document,
+          BrowserWindow.fromWebContents(event.sender)
+        )
         if (!savedDocument) return { ok: false, canceled: true, error: '用户取消保存' }
         const info = await repository.getInfo()
         return {
@@ -46,9 +49,12 @@ export function registerProjectIpc(repository: FileProjectRepository): void {
 
   ipcMain.handle(
     'project:save-as',
-    async (_, document: ProjectDocument): Promise<ProjectSaveResult> => {
+    async (event, document: ProjectDocument): Promise<ProjectSaveResult> => {
       try {
-        const savedDocument = await repository.saveAs(document)
+        const savedDocument = await repository.saveAs(
+          document,
+          BrowserWindow.fromWebContents(event.sender)
+        )
         if (!savedDocument) return { ok: false, canceled: true, error: '用户取消保存' }
         const info = await repository.getInfo()
         return {
@@ -63,9 +69,9 @@ export function registerProjectIpc(repository: FileProjectRepository): void {
     }
   )
 
-  ipcMain.handle('project:import-json', async (): Promise<ProjectImportResult> => {
+  ipcMain.handle('project:import-json', async (event): Promise<ProjectImportResult> => {
     try {
-      const document = await repository.importJson()
+      const document = await repository.importJson(BrowserWindow.fromWebContents(event.sender))
       if (!document) return { ok: false, canceled: true, error: '用户取消导入' }
       const info = await repository.getInfo()
       return {

@@ -1,4 +1,4 @@
-import type { App } from 'electron'
+import type { App, BrowserWindow, OpenDialogOptions, SaveDialogOptions } from 'electron'
 import { dialog } from 'electron'
 import { mkdir, readFile, rename, writeFile } from 'fs/promises'
 import { dirname, join } from 'path'
@@ -24,33 +24,46 @@ export class FileProjectRepository {
     return createDefaultProjectDocument()
   }
 
-  async save(document: ProjectDocument): Promise<ProjectDocument | null> {
-    if (!this.projectFile) return this.saveAs(document)
+  async save(
+    document: ProjectDocument,
+    owner?: BrowserWindow | null
+  ): Promise<ProjectDocument | null> {
+    if (!this.projectFile) return this.saveAs(document, owner)
     return this.writeToCurrentFile(document)
   }
 
-  async saveAs(document: ProjectDocument): Promise<ProjectDocument | null> {
+  async saveAs(
+    document: ProjectDocument,
+    owner?: BrowserWindow | null
+  ): Promise<ProjectDocument | null> {
     await mkdir(this.defaultDir, { recursive: true })
-    const result = await dialog.showSaveDialog({
+    const options: SaveDialogOptions = {
       title: '保存 Story Studio 项目',
       defaultPath: join(
         this.defaultDir,
         `${sanitizeFileName(document.title || '未命名项目')}.story.json`
       ),
       filters: PROJECT_FILTER
-    })
+    }
+    const result = owner
+      ? await dialog.showSaveDialog(owner, options)
+      : await dialog.showSaveDialog(options)
     if (result.canceled || !result.filePath) return null
     this.projectFile = result.filePath
     return this.writeToCurrentFile(document)
   }
 
-  async importJson(): Promise<ProjectDocument | null> {
-    const result = await dialog.showOpenDialog({
+  async importJson(owner?: BrowserWindow | null): Promise<ProjectDocument | null> {
+    await mkdir(this.defaultDir, { recursive: true })
+    const options: OpenDialogOptions = {
       title: '导入 Story Studio 项目 JSON',
       defaultPath: this.defaultDir,
       filters: PROJECT_FILTER,
       properties: ['openFile']
-    })
+    }
+    const result = owner
+      ? await dialog.showOpenDialog(owner, options)
+      : await dialog.showOpenDialog(options)
     if (result.canceled || result.filePaths.length === 0) return null
 
     const filePath = result.filePaths[0]
