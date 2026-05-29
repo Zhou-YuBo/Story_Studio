@@ -35,15 +35,10 @@ const portableCharacterName = computed(() => {
 const relationship = computed(() => relationshipStore.ensureRelationship(characterAId.value, characterBId.value))
 
 const selfFields: Array<{ key: keyof RelationshipSelf; label: string }> = [
-  { key: 'presentedSelf', label: '在对方面前是谁' },
-  { key: 'craftedSelf', label: '刻意塑造' },
-  { key: 'hiddenSelf', label: '刻意隐藏' },
-  { key: 'unconsciousSelf', label: '未意识到' },
-  { key: 'cherishesSelf', label: '是否珍视' },
-  { key: 'selfDeathView', label: '如何看待死亡' },
-  { key: 'preventsSelfDeath', label: '是否主动防止' },
-  { key: 'expectedDeathCondition', label: '自认何时死去' },
-  { key: 'actualDeathCondition', label: '实际何时死去' }
+  { key: 'bornCraftedSelf', label: '因对方而诞生的定制自我' },
+  { key: 'cherishesCraftedSelf', label: '是否珍视这个定制自我' },
+  { key: 'fearsSelfDeath', label: '是否恐惧这个自我的死亡' },
+  { key: 'preventsSelfDeath', label: '为了避免这个自我的死亡，能做到什么地步' }
 ]
 
 const definitionFields: Array<{ key: keyof CharacterRelationship['definitions']; label: string; placeholder: string }> = [
@@ -613,7 +608,7 @@ function saveRelationship(): void {
 
 .self-column {
   display: grid;
-  grid-template-rows: auto repeat(9, minmax(0, 1fr));
+  grid-template-rows: auto repeat(4, minmax(0, 1fr));
   gap: 6px;
   padding: 12px;
 }

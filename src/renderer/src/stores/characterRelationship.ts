@@ -3,15 +3,10 @@ import { ref } from 'vue'
 import { useProjectStore } from './project'
 
 export interface RelationshipSelf {
-  presentedSelf: string
-  craftedSelf: string
-  hiddenSelf: string
-  unconsciousSelf: string
-  cherishesSelf: string
-  selfDeathView: string
+  bornCraftedSelf: string
+  cherishesCraftedSelf: string
+  fearsSelfDeath: string
   preventsSelfDeath: string
-  expectedDeathCondition: string
-  actualDeathCondition: string
 }
 
 export interface RelationshipDefinitions {
@@ -41,15 +36,10 @@ let nextNodeId = 1
 
 function createDefaultRelationshipSelf(): RelationshipSelf {
   return {
-    presentedSelf: '',
-    craftedSelf: '',
-    hiddenSelf: '',
-    unconsciousSelf: '',
-    cherishesSelf: '',
-    selfDeathView: '',
-    preventsSelfDeath: '',
-    expectedDeathCondition: '',
-    actualDeathCondition: ''
+    bornCraftedSelf: '',
+    cherishesCraftedSelf: '',
+    fearsSelfDeath: '',
+    preventsSelfDeath: ''
   }
 }
 

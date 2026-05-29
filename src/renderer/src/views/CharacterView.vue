@@ -1,22 +1,48 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import CharacterDimensionWheel, {
   type CharacterDimensionPair,
   type CharacterDimensionSlot,
 } from '../components/character/CharacterDimensionWheel.vue'
+import { useCharacterStore } from '../stores/character'
 
-const overviewDimensions: CharacterDimensionPair[] = [
-  { id: 'connection-loss', positive: '渴望连接', negative: '相信消失' },
-  { id: 'control-collapse', positive: '控制', negative: '失控' },
-  { id: 'honesty-deception', positive: '诚实', negative: '自我欺骗' },
-  { id: 'tender-cruel', positive: '温柔', negative: '残酷' },
-]
+const characterStore = useCharacterStore()
 
-const overviewDimensionSlots: CharacterDimensionSlot[] = [
-  { dimensionId: 'connection-loss' },
-  { dimensionId: 'control-collapse' },
-  { dimensionId: 'honesty-deception' },
-  { dimensionId: 'tender-cruel' }
-]
+const overviewDimensions = computed<CharacterDimensionPair[]>(() => {
+  const character = characterStore.characters[0]
+  if (!character) return []
+  return character.dimensions.map((d) => ({
+    id: d.id,
+    positive: d.positive,
+    negative: d.negative
+  }))
+})
+
+const overviewDimensionSlots = computed<CharacterDimensionSlot[]>(() => {
+  const character = characterStore.characters[0]
+  if (!character) return []
+  return character.dimensions.map((d) => ({
+    dimensionId: d.id,
+    inverted: d.inverted
+  }))
+})
+
+const layerCounts = computed(() => {
+  return characterStore.characters.reduce<Record<string, number>>((counts, character) => {
+    counts[character.profile.layer] = (counts[character.profile.layer] ?? 0) + 1
+    return counts
+  }, {})
+})
+
+const firstTwoCharacterNames = computed(() => {
+  return characterStore.characters.slice(0, 2).map((c) => c.profile.name || '未命名')
+})
+
+const firstCharacterQuote = computed(() => {
+  const character = characterStore.characters[0]
+  if (!character) return ''
+  return character.truth.hiddenSelf || character.profile.logline || ''
+})
 </script>
 
 <template>
@@ -27,9 +53,8 @@ const overviewDimensionSlots: CharacterDimensionSlot[] = [
         <span class="entry-title">人物列表</span>
         <span class="entry-copy">进入单个人物档案，整理人物真相、语言方式、欲望与恐惧。</span>
         <span class="entry-meta">
-          <span>主角 1</span>
-          <span>第一圈 4</span>
-          <span>待整理 7</span>
+          <span v-for="(count, layer) in layerCounts" :key="layer">{{ layer }} {{ count }}</span>
+          <span v-if="Object.keys(layerCounts).length === 0">暂无人物</span>
         </span>
       </RouterLink>
 
@@ -38,9 +63,9 @@ const overviewDimensionSlots: CharacterDimensionSlot[] = [
         <span class="entry-title">二人关系</span>
         <span class="entry-copy">查看二人的亲疏变化、关系定义，以及彼此面前的定制自我。</span>
         <span class="relationship-preview">
-          <span>林澈</span>
+          <span>{{ firstTwoCharacterNames[0] || '--' }}</span>
           <i></i>
-          <span>周以安</span>
+          <span>{{ firstTwoCharacterNames[1] || '--' }}</span>
         </span>
       </RouterLink>
 
@@ -75,7 +100,7 @@ const overviewDimensionSlots: CharacterDimensionSlot[] = [
         <span class="entry-kicker">来，坐</span>
         <span class="entry-title">问询室</span>
         <span class="entry-copy">请人物进来，让他说话；等他出去后，再以作者视角翻看记录。</span>
-        <span class="entry-quote">“我不是害怕失去，我只是早就知道它会发生。”</span>
+        <span class="entry-quote" v-if="firstCharacterQuote">"{{ firstCharacterQuote }}"</span>
       </RouterLink>
     </div>
   </div>

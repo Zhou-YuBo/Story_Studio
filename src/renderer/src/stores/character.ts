@@ -1,7 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { useProjectStore } from './project'
-import { mockCharacters } from '../components/character/detail/mockCharacters'
 import type {
   CharacterDetail,
   CharacterDimensionSummaryItem,
@@ -22,10 +21,6 @@ function createDefaultInformationGap(): CharacterInformationGap {
   }
 }
 
-function cloneCharacters(characters: CharacterDetail[]): CharacterDetail[] {
-  return JSON.parse(JSON.stringify(characters))
-}
-
 function normalizeCharacters(characters: CharacterDetail[]): CharacterDetail[] {
   return characters.map((character) => ({
     ...character,
@@ -44,9 +39,9 @@ function normalizeCharacters(characters: CharacterDetail[]): CharacterDetail[] {
 
 function normalizeCharacterProjectData(data: unknown): CharacterDetail[] {
   if (!data || typeof data !== 'object' || Array.isArray(data))
-    return cloneCharacters(mockCharacters)
+    return []
   const characters = (data as { characters?: unknown }).characters
-  if (!Array.isArray(characters) || characters.length === 0) return cloneCharacters(mockCharacters)
+  if (!Array.isArray(characters) || characters.length === 0) return []
   return normalizeCharacters(characters as CharacterDetail[])
 }
 
@@ -74,11 +69,8 @@ function restoreCounters(characters: CharacterDetail[]) {
 }
 
 export const useCharacterStore = defineStore('character', () => {
-  const characters = ref<CharacterDetail[]>(cloneCharacters(mockCharacters))
-  const activeCharacterId = ref(characters.value[0]?.id ?? '')
-
-  resetCounters()
-  restoreCounters(characters.value)
+  const characters = ref<CharacterDetail[]>([])
+  const activeCharacterId = ref('')
 
   function hydrateFromProject(data: unknown): void {
     const nextCharacters = normalizeCharacterProjectData(data)
