@@ -11,9 +11,9 @@ type TopBarLevel = 'project' | 'act' | 'sequence'
 
 const COMPACT_CHART: CurveChartConfig = {
   width: 720,
-  left: 24,
-  right: 24,
-  top: 16,
+  left: 20,
+  right: 20,
+  top: 14,
   height: 56,
 }
 
@@ -122,6 +122,8 @@ const highlightTargetId = computed(() => {
 })
 
 const {
+  axes,
+  visibleAxisIds,
   displayedAxes,
   tickPositions,
   curveSeries,
@@ -161,8 +163,27 @@ function scrollToTarget(target: CurveTarget) {
   }
 }
 
-const legendItems = computed(() => curveSeries.value.slice(0, 8))
-const hiddenLegendCount = computed(() => Math.max(0, curveSeries.value.length - legendItems.value.length))
+interface LegendEntry {
+  id: string
+  color: string
+  positiveLabel: string
+  negativeLabel: string
+  visible: boolean
+}
+
+const legendEntries = computed<LegendEntry[]>(() =>
+  axes.value.map((axis) => ({
+    id: axis.id,
+    color: axis.color,
+    positiveLabel: axis.positiveLabel,
+    negativeLabel: axis.negativeLabel,
+    visible: visibleAxisIds.value.includes(axis.id),
+  })),
+)
+
+function toggleLegendAxis(entry: LegendEntry) {
+  store.toggleValueAxisVisible(resolvedOwnerType.value, resolvedOwnerId.value, entry.id)
+}
 
 const highlightX = computed(() => {
   if (!highlightTargetId.value || tickPositions.value.length === 0) return null
@@ -170,14 +191,11 @@ const highlightX = computed(() => {
   return tick ? tick.x : null
 })
 
-const svgViewBox = computed(() => {
-  const { width, top, height } = COMPACT_CHART
-  const totalHeight = top + height + 42
-  return `0 0 ${width} ${totalHeight}`
-})
-
-const svgBottom = computed(() => COMPACT_CHART.top + COMPACT_CHART.height)
-const tickLabelY = computed(() => svgBottom.value + 24)
+const chartRightEdge = COMPACT_CHART.width - COMPACT_CHART.right
+const chartBottom = COMPACT_CHART.top + COMPACT_CHART.height
+const chartMid = COMPACT_CHART.top + COMPACT_CHART.height / 2
+const tickLabelY = chartBottom + 24
+const svgViewBoxH = COMPACT_CHART.top + COMPACT_CHART.height + 42
 </script>
 
 <template>
@@ -211,89 +229,82 @@ const tickLabelY = computed(() => svgBottom.value + 24)
       <span v-if="isFallingBack" class="topbar-fallback-hint">（回退）</span>
     </div>
 
-    <div class="topbar-curve-area">
-      <svg
-        v-if="hasData"
-        class="curve-svg"
-        :viewBox="svgViewBox"
-        role="img"
-        aria-label="价值曲线"
-      >
-        <!-- Highlight band -->
-        <rect
-          v-if="highlightX !== null"
-          :x="highlightX - 18"
-          y="0"
-          width="36"
-          :height="svgBottom"
-          class="highlight-band"
-        />
-
-        <!-- Grid -->
-        <line :x1="COMPACT_CHART.left" :y1="svgBottom" :x2="COMPACT_CHART.width - COMPACT_CHART.right" :y2="svgBottom" class="axis-line" />
-        <line :x1="COMPACT_CHART.left" :y1="COMPACT_CHART.top + COMPACT_CHART.height / 2" :x2="COMPACT_CHART.width - COMPACT_CHART.right" :y2="COMPACT_CHART.top + COMPACT_CHART.height / 2" class="center-line" />
-        <line :x1="COMPACT_CHART.left" :y1="COMPACT_CHART.top" :x2="COMPACT_CHART.width - COMPACT_CHART.right" :y2="COMPACT_CHART.top" class="grid-line" />
-
-        <!-- Tick lines and labels -->
-        <g v-for="tick in tickPositions" :key="tick.id">
-          <line :x1="tick.x" :y1="COMPACT_CHART.top" :x2="tick.x" :y2="svgBottom" class="tick-line" />
-          <text
-            :x="tick.x"
-            :y="tickLabelY"
-            text-anchor="middle"
-            class="tick-label"
-            :class="{ highlighted: tick.id === highlightTargetId }"
-            @click="scrollToTarget(tick)"
-          >
-            {{ tick.label }}
-          </text>
-        </g>
-
-        <!-- Curves -->
-        <g v-for="series in curveSeries" :key="series.axis.id">
-          <path :d="series.path" :stroke="series.axis.color" class="curve-path" />
-          <circle
-            v-for="point in series.points"
-            :key="point.target.id"
-            :cx="point.x"
-            :cy="point.y"
-            r="4"
-            :fill="series.axis.color"
-            class="curve-point"
-            :class="{ highlighted: point.target.id === highlightTargetId }"
+    <div class="topbar-body">
+      <!-- 左侧：曲线图 -->
+      <div class="curve-area">
+        <svg
+          v-if="hasData"
+          class="curve-svg"
+          :viewBox="`0 0 ${COMPACT_CHART.width} ${svgViewBoxH}`"
+          role="img"
+          aria-label="价值曲线"
+        >
+          <!-- Highlight band -->
+          <rect
+            v-if="highlightX !== null"
+            :x="highlightX - 18"
+            y="0"
+            width="36"
+            :height="chartBottom"
+            class="highlight-band"
           />
-        </g>
 
-        <!-- Legend -->
-        <g class="compact-legend">
-          <g v-for="(item, index) in legendItems" :key="item.axis.id">
-            <circle
-              :cx="COMPACT_CHART.left + index * 136"
-              :cy="svgBottom + 36"
-              r="3"
-              :fill="item.axis.color"
-            />
+          <!-- Grid -->
+          <line :x1="COMPACT_CHART.left" :y1="chartBottom" :x2="chartRightEdge" :y2="chartBottom" class="axis-line" />
+          <line :x1="COMPACT_CHART.left" :y1="chartMid" :x2="chartRightEdge" :y2="chartMid" class="center-line" />
+          <line :x1="COMPACT_CHART.left" :y1="COMPACT_CHART.top" :x2="chartRightEdge" :y2="COMPACT_CHART.top" class="grid-line" />
+
+          <!-- Tick lines and labels -->
+          <g v-for="tick in tickPositions" :key="tick.id">
+            <line :x1="tick.x" :y1="COMPACT_CHART.top" :x2="tick.x" :y2="chartBottom" class="tick-line" />
             <text
-              :x="COMPACT_CHART.left + 8 + index * 136"
-              :y="svgBottom + 37"
-              class="legend-text"
+              :x="tick.x"
+              :y="tickLabelY"
+              text-anchor="middle"
+              class="tick-label"
+              :class="{ highlighted: tick.id === highlightTargetId }"
+              @click="scrollToTarget(tick)"
             >
-              {{ item.axis.positiveLabel }}/{{ item.axis.negativeLabel }}
+              {{ tick.label }}
             </text>
           </g>
-          <text
-            v-if="hiddenLegendCount > 0"
-            :x="COMPACT_CHART.left + legendItems.length * 136"
-            :y="svgBottom + 37"
-            class="legend-more"
-          >
-            +{{ hiddenLegendCount }}
-          </text>
-        </g>
-      </svg>
 
-      <div v-else class="curve-empty">
-        <span>{{ chartEmptyText }}</span>
+          <!-- Curves -->
+          <g v-for="series in curveSeries" :key="series.axis.id">
+            <path :d="series.path" :stroke="series.axis.color" class="curve-path" />
+            <circle
+              v-for="point in series.points"
+              :key="point.target.id"
+              :cx="point.x"
+              :cy="point.y"
+              r="4"
+              :fill="series.axis.color"
+              class="curve-point"
+              :class="{ highlighted: point.target.id === highlightTargetId }"
+            />
+          </g>
+        </svg>
+
+        <div v-else class="curve-empty">
+          <span>{{ chartEmptyText }}</span>
+        </div>
+      </div>
+
+      <!-- 右侧：价值轴多选图例 -->
+      <div v-if="axes.length > 0" class="legend-panel" :class="{ empty: axes.length === 0 }">
+        <div
+          v-for="entry in legendEntries"
+          :key="entry.id"
+          class="legend-item"
+          :class="{ dimmed: !entry.visible }"
+          @click="toggleLegendAxis(entry)"
+        >
+          <span class="legend-checkbox" :class="{ checked: entry.visible }">
+            <span v-if="entry.visible" class="legend-check-mark">&#x2713;</span>
+          </span>
+          <span class="legend-dot" :style="{ background: entry.visible ? entry.color : '#3f3f46' }" />
+          <span class="legend-label">{{ entry.positiveLabel }}/{{ entry.negativeLabel }}</span>
+        </div>
       </div>
     </div>
   </div>
@@ -316,6 +327,7 @@ const tickLabelY = computed(() => svgBottom.value + 24)
   gap: 10px;
   padding: 6px 12px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  flex-shrink: 0;
 }
 
 .topbar-section-label {
@@ -365,9 +377,18 @@ const tickLabelY = computed(() => svgBottom.value + 24)
   font-size: 10px;
 }
 
-.topbar-curve-area {
+/* 主体：曲线 + 图例 */
+.topbar-body {
+  display: flex;
   flex: 1;
   min-height: 0;
+  overflow: hidden;
+}
+
+/* 左侧曲线区 */
+.curve-area {
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   background:
     radial-gradient(circle at 50% 40%, rgba(167, 139, 250, 0.06), transparent 40%),
@@ -450,20 +471,6 @@ const tickLabelY = computed(() => svgBottom.value + 24)
   filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.3));
 }
 
-.compact-legend {
-  pointer-events: none;
-}
-
-.legend-text {
-  fill: #71717a;
-  font-size: 9px;
-}
-
-.legend-more {
-  fill: #52525b;
-  font-size: 9px;
-}
-
 .curve-empty {
   width: 100%;
   height: 100%;
@@ -472,5 +479,81 @@ const tickLabelY = computed(() => svgBottom.value + 24)
   justify-content: center;
   color: #52525b;
   font-size: 12px;
+}
+
+/* 右侧图例面板 */
+.legend-panel {
+  width: 170px;
+  flex-shrink: 0;
+  border-left: 1px solid #27272a;
+  padding: 4px 8px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: rgba(255, 255, 255, 0.015);
+}
+
+.legend-panel.empty {
+  display: none;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 4px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.1s;
+  min-height: 22px;
+}
+
+.legend-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.legend-item.dimmed .legend-label {
+  color: #52525b;
+}
+
+.legend-checkbox {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  border: 1px solid #52525b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: transparent;
+  transition: all 0.15s;
+}
+
+.legend-checkbox.checked {
+  background: rgba(167, 139, 250, 0.25);
+  border-color: #a78bfa;
+}
+
+.legend-check-mark {
+  color: #a78bfa;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+.legend-label {
+  color: #a1a1aa;
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 </style>
