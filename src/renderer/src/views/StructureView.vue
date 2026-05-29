@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import ValueCurvePanel from '../components/structure/ValueCurvePanel.vue'
 import {
   PROJECT_OWNER_ID,
+  type ActCoreTextField,
   type StoryCoreFields,
   type StructureOwnerType,
   useStructureStore,
@@ -174,6 +175,15 @@ function axisLabel(axisId: string) {
 
 function updateStoryField(field: StoryCoreTextField, e: Event) {
   store.updateStoryCoreField(field, (e.target as HTMLTextAreaElement | HTMLInputElement).value)
+}
+
+function updateActCoreField(field: ActCoreTextField, e: Event) {
+  if (selectedNode.value.type !== 'act') return
+  store.updateActCoreField(
+    selectedNode.value.actId,
+    field,
+    (e.target as HTMLTextAreaElement | HTMLInputElement).value,
+  )
 }
 
 function addCoreAxis(axisId: string) {
@@ -484,6 +494,55 @@ function onSeqLabelBlur(actId: string, seqId: string, e: Event) {
           </div>
         </div>
 
+        <div v-else-if="selectedNode.type === 'act' && selectedAct" class="act-core-panel">
+          <div class="story-line">
+            <span>本幕最高任务：</span>
+            <input
+              :value="selectedAct.core.task"
+              class="story-inline-input story-input-xl"
+              type="text"
+              @input="updateActCoreField('task', $event)"
+            />
+          </div>
+
+          <div class="story-line story-line-wrap">
+            <span>开始状态：</span>
+            <input
+              :value="selectedAct.core.startState"
+              class="story-inline-input"
+              type="text"
+              @input="updateActCoreField('startState', $event)"
+            />
+            <span>结束状态：</span>
+            <input
+              :value="selectedAct.core.endState"
+              class="story-inline-input"
+              type="text"
+              @input="updateActCoreField('endState', $event)"
+            />
+          </div>
+
+          <div class="story-line">
+            <span>假如</span>
+            <input
+              :value="selectedAct.core.endingTest"
+              class="story-inline-input story-input-xl"
+              type="text"
+              @input="updateActCoreField('endingTest', $event)"
+            />
+            <span>，就全剧终。</span>
+          </div>
+
+          <label class="act-synopsis-field">
+            <span>剧情梗概：</span>
+            <textarea
+              :value="selectedAct.core.synopsis"
+              rows="5"
+              @input="updateActCoreField('synopsis', $event)"
+            />
+          </label>
+        </div>
+
         <div v-else class="lower-placeholder">
           <div class="eyebrow">预留区域</div>
           <p>当前{{ selectedKindLabel }}：{{ selectedTitle }}</p>
@@ -753,13 +812,18 @@ button.tree-row {
   overflow: auto;
 }
 
-.story-core-panel {
+.story-core-panel,
+.act-core-panel {
   min-height: 100%;
   display: flex;
   flex-direction: column;
   justify-content: center;
   gap: 10px;
   padding: 12px 18px;
+}
+
+.act-core-panel {
+  justify-content: flex-start;
 }
 
 .story-line {
@@ -996,6 +1060,32 @@ button.tree-row {
   flex-direction: column;
   gap: 8px;
   margin-top: 8px;
+}
+
+.act-synopsis-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: #d4d4d8;
+  font-size: 14px;
+}
+
+.act-synopsis-field textarea {
+  width: 100%;
+  resize: vertical;
+  border: 1px solid #3f3f46;
+  border-radius: 8px;
+  background: #111114;
+  color: #e4e4e7;
+  outline: none;
+  padding: 8px 10px;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.act-synopsis-field textarea:focus {
+  border-color: rgba(167, 139, 250, 0.72);
+  box-shadow: 0 0 0 1px rgba(167, 139, 250, 0.18);
 }
 
 .lower-placeholder {

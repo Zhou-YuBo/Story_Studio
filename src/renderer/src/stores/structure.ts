@@ -17,6 +17,16 @@ export interface StoryCoreFields {
 
 type StoryCoreTextField = Exclude<keyof StoryCoreFields, 'coreValueAxisIds'>
 
+export interface ActCoreFields {
+  task: string
+  startState: string
+  endState: string
+  endingTest: string
+  synopsis: string
+}
+
+export type ActCoreTextField = keyof ActCoreFields
+
 export interface StructureSequence {
   id: string
   label: string
@@ -28,6 +38,7 @@ export interface StructureAct {
   label: string
   color: string
   sequences: StructureSequence[]
+  core: ActCoreFields
 }
 
 export interface ValueAxis {
@@ -99,6 +110,16 @@ function createEmptyStoryCore(): StoryCoreFields {
   }
 }
 
+function createEmptyActCore(): ActCoreFields {
+  return {
+    task: '',
+    startState: '',
+    endState: '',
+    endingTest: '',
+    synopsis: '',
+  }
+}
+
 function createEmptyState(): StructureState {
   return {
     version: 2,
@@ -131,13 +152,42 @@ function normalizeStoryCore(value: unknown): StoryCoreFields {
   }
 }
 
+function normalizeActCore(value: unknown): ActCoreFields {
+  const empty = createEmptyActCore()
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return empty
+
+  const core = value as Partial<ActCoreFields>
+  return {
+    task: typeof core.task === 'string' ? core.task : '',
+    startState: typeof core.startState === 'string' ? core.startState : '',
+    endState: typeof core.endState === 'string' ? core.endState : '',
+    endingTest: typeof core.endingTest === 'string' ? core.endingTest : '',
+    synopsis: typeof core.synopsis === 'string' ? core.synopsis : '',
+  }
+}
+
+function normalizeAct(value: unknown): StructureAct | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+
+  const act = value as Partial<StructureAct>
+  if (typeof act.id !== 'string' || typeof act.label !== 'string') return null
+
+  return {
+    id: act.id,
+    label: act.label,
+    color: typeof act.color === 'string' ? act.color : MORANDY_COLORS[0],
+    sequences: Array.isArray(act.sequences) ? act.sequences : [],
+    core: normalizeActCore(act.core),
+  }
+}
+
 function normalizeState(value: unknown): StructureState {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return createEmptyState()
 
   const state = value as Partial<StructureState>
   return {
     version: 2,
-    acts: Array.isArray(state.acts) ? state.acts : [],
+    acts: Array.isArray(state.acts) ? state.acts.map(normalizeAct).filter((act) => act !== null) : [],
     valueAxes: Array.isArray(state.valueAxes) ? state.valueAxes : [],
     visibleValueAxisIds:
       state.visibleValueAxisIds && typeof state.visibleValueAxisIds === 'object'
@@ -261,6 +311,7 @@ export const useStructureStore = defineStore('structure', () => {
           color: MORANDY_COLORS[(idx + 1) % MORANDY_COLORS.length],
         },
       ],
+      core: createEmptyActCore(),
     }
     acts.value.push(act)
     save()
@@ -329,6 +380,13 @@ export const useStructureStore = defineStore('structure', () => {
       seq.label = label
       save()
     }
+  }
+
+  function updateActCoreField(actId: string, field: ActCoreTextField, value: string) {
+    const act = acts.value.find((a) => a.id === actId)
+    if (!act) return
+    act.core[field] = value
+    save()
   }
 
   function getValueAxesForOwner(ownerType: StructureOwnerType, ownerId: string): ValueAxis[] {
@@ -516,6 +574,7 @@ export const useStructureStore = defineStore('structure', () => {
     updateActLabel,
     updateSequenceColor,
     updateSequenceLabel,
+    updateActCoreField,
     getValueAxesForOwner,
     getVisibleAxisIds,
     addValueAxis,
