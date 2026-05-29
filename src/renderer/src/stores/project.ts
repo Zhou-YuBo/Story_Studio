@@ -91,6 +91,8 @@ export const useProjectStore = defineStore('project', () => {
 
   function toProjectDocument(): ProjectDocument {
     syncSceneDocFromEditor()
+    useInspirationStore().syncCanvasDraft()
+    useWorldStore().syncCanvasDraft()
     const now = new Date().toISOString()
 
     return cloneForIpc({

@@ -274,6 +274,7 @@ export const useInspirationStore = defineStore('inspiration', () => {
     createCanvas: core.createCanvas,
     openCanvas: core.openCanvas,
     saveCurrentCanvas: core.saveCurrentCanvas,
+    syncCanvasDraft: core.syncCanvasDraft,
     deleteCanvas: core.deleteCanvas,
     renameCanvas: core.renameCanvas,
     newCanvas: core.newCanvas,

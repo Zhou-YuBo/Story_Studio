@@ -450,7 +450,7 @@ function onPaneClick(event: MouseEvent) {
       >
         <VueFlow
           ref="vueFlowRef"
-          v-model:nodes="nodes"
+          :nodes="nodes"
           :edges="edges"
           :node-types="nodeTypes"
           :edge-types="edgeTypes"

@@ -114,6 +114,29 @@ export function useCanvasCore<TCard extends BaseCard>(config: CanvasCoreConfig) 
     dirty.value = false
   }
 
+  function syncCanvasDraft() {
+    if (!dirty.value) return
+    if (!activeCanvasId.value) {
+      const canvas = {
+        id: `${config.idPrefix.canvas}${nextCanvasId++}`,
+        name: '未命名画布',
+        cards: [],
+        edges: [],
+        drawings: [],
+        updatedAt: new Date().toISOString()
+      } as TCanvas
+      canvases.value.push(canvas)
+      activeCanvasId.value = canvas.id
+    }
+    const canvas = canvases.value.find((c) => c.id === activeCanvasId.value)
+    if (!canvas) return
+    canvas.cards = JSON.parse(JSON.stringify(cards.value))
+    canvas.edges = JSON.parse(JSON.stringify(edges.value))
+    canvas.drawings = JSON.parse(JSON.stringify(drawings.value))
+    canvas.updatedAt = new Date().toISOString()
+    dirty.value = false
+  }
+
   function deleteCanvas(id: string) {
     canvases.value = canvases.value.filter((c) => c.id !== id)
     persist()
@@ -247,6 +270,7 @@ export function useCanvasCore<TCard extends BaseCard>(config: CanvasCoreConfig) 
     createCanvas,
     openCanvas,
     saveCurrentCanvas,
+    syncCanvasDraft,
     deleteCanvas,
     renameCanvas,
     newCanvas,

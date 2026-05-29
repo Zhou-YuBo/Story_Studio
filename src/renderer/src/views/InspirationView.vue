@@ -378,7 +378,7 @@ function formatDateTime(iso: string): string {
       <div class="flex-1 relative outline-none" @dragover.prevent @drop="onDrop" @mousedown.right="rc.onCanvasRightDown" @click="closeContextMenu" @keydown="onKeyDown" tabindex="0">
         <VueFlow
           ref="vueFlowRef"
-          v-model:nodes="nodes"
+          :nodes="nodes"
           :edges="edges"
           :node-types="nodeTypes"
           :edge-types="edgeTypes"
