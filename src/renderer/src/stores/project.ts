@@ -10,6 +10,7 @@ import { useBeatStore } from './beat'
 import { useCharacterStore } from './character'
 import { useCharacterCastUniverseStore } from './characterCastUniverse'
 import { useCharacterRelationshipStore } from './characterRelationship'
+import { useEditorBridge } from './editor-bridge'
 import { useInspirationStore } from './inspiration'
 import { useReminderStore } from './reminder'
 import { useStructureStore } from './structure'
@@ -82,7 +83,14 @@ export const useProjectStore = defineStore('project', () => {
     return JSON.parse(JSON.stringify(toRaw(value))) as T
   }
 
+  function syncSceneDocFromEditor(): void {
+    const editor = useEditorBridge().editor
+    if (!editor) return
+    sceneDoc.value = editor.getJSON()
+  }
+
   function toProjectDocument(): ProjectDocument {
+    syncSceneDocFromEditor()
     const now = new Date().toISOString()
 
     return cloneForIpc({
@@ -234,6 +242,7 @@ export const useProjectStore = defineStore('project', () => {
     saveAs,
     importJson,
     setSceneDoc,
+    syncSceneDocFromEditor,
     toProjectDocument
   }
 })

@@ -107,6 +107,7 @@ useStructureSync(editor)
 let saveTimer: ReturnType<typeof setTimeout> | null = null
 let updateHandler: ((props: EditorEvents['update']) => void) | null = null
 let registeredEditor: Editor | null = null
+let isApplyingProjectDoc = false
 
 function detachUpdateHandler(): void {
   if (registeredEditor && updateHandler) {
@@ -125,6 +126,7 @@ watch(
     lineGridStore.rebuild(editorInstance.state.doc)
     updateHandler = ({ editor: e }) => {
       lineGridStore.rebuild(e.state.doc)
+      if (isApplyingProjectDoc) return
       if (saveTimer) clearTimeout(saveTimer)
       saveTimer = setTimeout(() => {
         projectStore.setSceneDoc(e.getJSON())
@@ -134,6 +136,27 @@ watch(
     registeredEditor = editorInstance
   },
   { immediate: true }
+)
+
+watch(
+  () => projectStore.sceneDoc,
+  (doc) => {
+    const editorInstance = editor.value
+    if (!editorInstance || !doc || isApplyingProjectDoc) return
+    if (JSON.stringify(editorInstance.getJSON()) === JSON.stringify(doc)) return
+
+    isApplyingProjectDoc = true
+    try {
+      if (saveTimer) {
+        clearTimeout(saveTimer)
+        saveTimer = null
+      }
+      editorInstance.commands.setContent(doc)
+      lineGridStore.rebuild(editorInstance.state.doc)
+    } finally {
+      isApplyingProjectDoc = false
+    }
+  }
 )
 
 onBeforeUnmount(() => {
