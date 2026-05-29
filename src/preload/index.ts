@@ -10,7 +10,10 @@ const api: AppApi = {
     saveAs: (document: ProjectDocument) => ipcRenderer.invoke('project:save-as', document),
     importJson: () => ipcRenderer.invoke('project:import-json'),
     getInfo: () => ipcRenderer.invoke('project:get-info'),
-    openFromPath: (filePath: string) => ipcRenderer.invoke('project:open-from-path', filePath)
+    openFromPath: (filePath: string) => ipcRenderer.invoke('project:open-from-path', filePath),
+    importFile: () => ipcRenderer.invoke('project:import-file'),
+    importPaths: (paths: string[]) => ipcRenderer.invoke('project:import-paths', paths),
+    readAssetFile: (relativePath: string) => ipcRenderer.invoke('project:read-asset-file', relativePath)
   },
   recent: {
     get: () => ipcRenderer.invoke('recent:get'),

@@ -96,6 +96,12 @@ export type ProjectImportResult =
   | { ok: true; document: ProjectDocument; projectPath: string; assetsPath: string | null }
   | { ok: false; canceled?: boolean; error: string }
 
+export interface ImportedAsset {
+  relativePath: string
+  originalName: string
+  mimeType: string
+}
+
 export interface ProjectApi {
   load(): Promise<ProjectLoadResult>
   save(document: ProjectDocument): Promise<ProjectSaveResult>
@@ -103,7 +109,18 @@ export interface ProjectApi {
   importJson(): Promise<ProjectImportResult>
   getInfo(): Promise<ProjectInfo>
   openFromPath(filePath: string): Promise<ProjectOpenFromPathResult>
+  importFile(): Promise<ProjectImportFileResult>
+  importPaths(paths: string[]): Promise<ProjectImportFileResult>
+  readAssetFile(relativePath: string): Promise<ProjectReadAssetResult>
 }
+
+export type ProjectImportFileResult =
+  | { ok: true; assets: ImportedAsset[] }
+  | { ok: false; canceled?: boolean; error: string }
+
+export type ProjectReadAssetResult =
+  | { ok: true; content: string }
+  | { ok: false; error: string }
 
 export interface AppApi {
   project: ProjectApi

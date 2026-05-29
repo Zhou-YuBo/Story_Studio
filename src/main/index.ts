@@ -1,10 +1,13 @@
-import { app, shell, BrowserWindow } from 'electron'
-import { join } from 'path'
+import { app, shell, BrowserWindow, protocol } from 'electron'
+import { extname, join } from 'path'
+import { readFile } from 'fs/promises'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { registerProjectIpc } from './project-ipc'
 import { FileProjectRepository } from './project-repository'
 import { registerRecentIpc } from './recent-projects'
+
+let repository: FileProjectRepository
 
 function createWindow(): void {
   // Create the browser window.
@@ -53,8 +56,24 @@ app.whenReady().then(() => {
     optimizer.watchWindowShortcuts(window)
   })
 
-  registerProjectIpc(new FileProjectRepository(app))
+  repository = new FileProjectRepository(app)
+  registerProjectIpc(repository)
   registerRecentIpc(app)
+
+  protocol.handle('project-asset', async (request) => {
+    try {
+      const url = new URL(request.url)
+      const relativePath = decodeURIComponent(url.host + url.pathname)
+      const absolutePath = repository.getAssetAbsolutePath(relativePath)
+      const data = await readFile(absolutePath)
+      const mimeType = getMimeType(extname(absolutePath))
+      return new Response(data, {
+        headers: { 'Content-Type': mimeType, 'Cache-Control': 'no-cache' }
+      })
+    } catch {
+      return new Response('Not found', { status: 404 })
+    }
+  })
 
   createWindow()
 
@@ -74,5 +93,14 @@ app.on('window-all-closed', () => {
   }
 })
 
-// In this file you can include the rest of your app's specific main process
-// code. You can also put them in separate files and require them here.
+function getMimeType(ext: string): string {
+  const map: Record<string, string> = {
+    '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png',
+    '.gif': 'image/gif', '.webp': 'image/webp', '.svg': 'image/svg+xml',
+    '.bmp': 'image/bmp', '.mp3': 'audio/mpeg', '.wav': 'audio/wav',
+    '.ogg': 'audio/ogg', '.flac': 'audio/flac', '.aac': 'audio/aac',
+    '.m4a': 'audio/mp4', '.pdf': 'application/pdf', '.txt': 'text/plain',
+    '.md': 'text/plain', '.csv': 'text/plain', '.json': 'application/json'
+  }
+  return map[ext.toLowerCase()] ?? 'application/octet-stream'
+}

@@ -26,6 +26,11 @@ const cardHeight = computed(() => card.value?.height ?? 160)
 
 const highlighted = computed(() => store.highlightCardIds.includes(props.id))
 
+const assetUrl = computed(() => {
+  if (!item.value?.filePath) return ''
+  return `project-asset://${item.value.filePath}`
+})
+
 // ---- 8 方向缩放 ----
 type Dir = 'n' | 's' | 'e' | 'w' | 'nw' | 'ne' | 'sw' | 'se'
 
@@ -164,7 +169,7 @@ onBeforeUnmount(() => {
 
     <div class="card-body">
       <template v-if="item?.type === 'image'">
-        <img :src="item.filePath" class="card-image" />
+        <img :src="assetUrl" class="card-image" />
       </template>
       <template v-else-if="item?.type === 'text'">
         <textarea
@@ -189,7 +194,7 @@ onBeforeUnmount(() => {
       <template v-else-if="item?.type === 'audio'">
         <audio
           ref="audioEl"
-          :src="item.filePath"
+          :src="assetUrl"
           preload="metadata"
           @loadedmetadata="onLoadedMetadata"
           @ended="onAudioEnded"

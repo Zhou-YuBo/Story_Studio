@@ -314,6 +314,49 @@ function formatDateTime(iso: string): string {
   const d = new Date(iso)
   return `${(d.getMonth() + 1).toString().padStart(2, '0')}-${d.getDate().toString().padStart(2, '0')} ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`
 }
+
+// ---- 文件导入 ----
+async function handleImportFiles() {
+  await store.importFiles()
+}
+
+function hasExternalFiles(event: DragEvent): boolean {
+  return event.dataTransfer?.types.includes('Files') ?? false
+}
+
+async function onPanelDrop(event: DragEvent) {
+  if (hasExternalFiles(event)) {
+    event.preventDefault()
+    const files = event.dataTransfer!.files
+    const paths: string[] = []
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i] as (File & { path?: string })
+      if (file.path) paths.push(file.path)
+    }
+    if (paths.length > 0) await store.importPaths(paths)
+  }
+}
+
+async function onCanvasExternalDrop(event: DragEvent) {
+  if (!hasExternalFiles(event) || !vueFlowRef.value) return
+  event.preventDefault()
+  const files = event.dataTransfer!.files
+  const paths: string[] = []
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i] as (File & { path?: string })
+    if (file.path) paths.push(file.path)
+  }
+  if (paths.length === 0) return
+
+  const items = await store.importPaths(paths)
+  if (items.length === 0) return
+
+  const position = vueFlowRef.value.screenToFlowCoordinate({ x: event.clientX, y: event.clientY })
+  history.pushSnapshot()
+  items.forEach((item, index) => {
+    store.addCard(item.id, position.x - 130 + index * 20, position.y - 20 + index * 20)
+  })
+}
 </script>
 
 <template>
@@ -340,7 +383,20 @@ function formatDateTime(iso: string): string {
       </div>
 
       <!-- 素材 Tab -->
-      <div v-show="leftTab === 'materials'" class="flex-1 overflow-y-auto scrollbar-subtle">
+      <div
+        v-show="leftTab === 'materials'"
+        class="flex-1 overflow-y-auto scrollbar-subtle flex flex-col"
+        @dragover.prevent
+        @drop="onPanelDrop"
+      >
+        <div class="px-3 py-2 border-b border-zinc-800">
+          <button
+            class="w-full h-8 rounded bg-zinc-800 hover:bg-zinc-700 text-xs text-zinc-300 transition-colors"
+            @click="handleImportFiles"
+          >
+            + 导入文件
+          </button>
+        </div>
         <div
           v-for="item in store.items"
           :key="item.id"
@@ -375,7 +431,7 @@ function formatDateTime(iso: string): string {
     <!-- 中间：画布 -->
     <main class="flex-1 bg-zinc-900 flex flex-col min-w-0">
       <CanvasHeader :name="activeCanvasName" :dirty="store.dirty" @save="store.saveCurrentCanvas()" />
-      <div class="flex-1 relative outline-none" @dragover.prevent @drop="onDrop" @mousedown.right="rc.onCanvasRightDown" @click="closeContextMenu" @keydown="onKeyDown" tabindex="0">
+      <div class="flex-1 relative outline-none" @dragover.prevent @drop="hasExternalFiles($event) ? onCanvasExternalDrop($event) : onDrop($event)" @mousedown.right="rc.onCanvasRightDown" @click="closeContextMenu" @keydown="onKeyDown" tabindex="0">
         <VueFlow
           ref="vueFlowRef"
           :nodes="nodes"

@@ -31,12 +31,8 @@ export interface Note {
 let nextNoteId = 1
 let nextItemId = 100
 
-function cloneItems(items: InspirationItem[]): InspirationItem[] {
-  return JSON.parse(JSON.stringify(items))
-}
-
 function normalizeItems(value: unknown): InspirationItem[] {
-  if (!Array.isArray(value) || value.length === 0) return cloneItems(mockItems)
+  if (!Array.isArray(value)) return []
   return value.filter((item): item is InspirationItem => {
     if (!item || typeof item !== 'object') return false
     const candidate = item as Partial<InspirationItem>
@@ -74,48 +70,6 @@ function resetCounters(): void {
   nextItemId = 100
 }
 
-const mockItems: InspirationItem[] = [
-  {
-    id: 'src-1',
-    type: 'image',
-    title: '角色概念图',
-    filePath: '/demo/concept.jpg',
-    createdAt: '2026-05-15'
-  },
-  {
-    id: 'src-2',
-    type: 'text',
-    title: '随手记：一个矛盾的开场',
-    filePath: '',
-    content:
-      '主角醒来发现自己在陌生房间，窗外景色每三分钟变换一次。他必须在对面的门关闭前逃出——但每次开门，里面走出的都是不同版本的他。',
-    createdAt: '2026-05-17'
-  },
-  {
-    id: 'src-3',
-    type: 'image',
-    title: '场景参考：废弃教堂',
-    filePath: '/demo/church.jpg',
-    createdAt: '2026-05-14'
-  },
-  {
-    id: 'src-4',
-    type: 'pdf',
-    title: '神话学研究笔记.pdf',
-    filePath: '/demo/myth-study.pdf',
-    content: 'Joseph Campbell 英雄旅程十二阶段摘要',
-    createdAt: '2026-05-12'
-  },
-  {
-    id: 'src-5',
-    type: 'audio',
-    title: '氛围参考：雨夜低语',
-    filePath: '/demo/rain-night.mp3',
-    content: '氛围音效 · 3:42',
-    createdAt: '2026-05-18'
-  }
-]
-
 export const useInspirationStore = defineStore('inspiration', () => {
   const core = useCanvasCore<InspirationCard>({
     idPrefix: { card: 'card-', edge: 'edge-', canvas: 'canvas-' },
@@ -124,7 +78,7 @@ export const useInspirationStore = defineStore('inspiration', () => {
   })
 
   // ---- 灵感特有状态 ----
-  const items = ref<InspirationItem[]>(cloneItems(mockItems))
+  const items = ref<InspirationItem[]>([])
   const notes = ref<Note[]>([])
   const editingNoteId = ref<string | null>(null)
   const highlightCardIds = ref<string[]>([])
@@ -170,7 +124,7 @@ export const useInspirationStore = defineStore('inspiration', () => {
       x,
       y,
       width: 260,
-      height: inspirationId.startsWith('src-2') ? 120 : 160
+      height: 160
     }
     core.pushCard(card)
     return card
@@ -179,6 +133,53 @@ export const useInspirationStore = defineStore('inspiration', () => {
   // ---- 灵感特有：素材操作 ----
   function getItemById(id: string): InspirationItem | undefined {
     return items.value.find((i) => i.id === id)
+  }
+
+  function mimeToType(mimeType: string): InspirationItem['type'] {
+    if (mimeType.startsWith('image/')) return 'image'
+    if (mimeType.startsWith('audio/')) return 'audio'
+    if (mimeType === 'application/pdf') return 'pdf'
+    return 'text'
+  }
+
+  function createFileItem(asset: {
+    relativePath: string
+    originalName: string
+    mimeType: string
+  }): InspirationItem {
+    const type = mimeToType(asset.mimeType)
+    const item: InspirationItem = {
+      id: `item-${nextItemId++}`,
+      type,
+      title: asset.originalName,
+      filePath: asset.relativePath,
+      content: '',
+      createdAt: new Date().toISOString().slice(0, 10)
+    }
+    items.value.push(item)
+    return item
+  }
+
+  async function importFiles(): Promise<InspirationItem[]> {
+    const result = await window.api.project.importFile()
+    if (!result.ok || !result.assets) return []
+    const newItems = result.assets.map((asset) => createFileItem(asset))
+    useProjectStore().scheduleSave()
+    return newItems
+  }
+
+  async function importPaths(paths: string[]): Promise<InspirationItem[]> {
+    const result = await window.api.project.importPaths(paths)
+    if (!result.ok || !result.assets) return []
+    const newItems = result.assets.map((asset) => createFileItem(asset))
+    useProjectStore().scheduleSave()
+    return newItems
+  }
+
+  async function readAssetContent(relativePath: string): Promise<string> {
+    const result = await window.api.project.readAssetFile(relativePath)
+    if (!result.ok) return ''
+    return result.content
   }
 
   function createTextItem(content: string = ''): InspirationItem {
@@ -295,6 +296,10 @@ export const useInspirationStore = defineStore('inspiration', () => {
     highlightCardIds,
     addCard,
     getItemById,
+    createFileItem,
+    importFiles,
+    importPaths,
+    readAssetContent,
     createTextItem,
     updateItemContent,
     createNote,
