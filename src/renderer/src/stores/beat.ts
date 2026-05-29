@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
+import { useProjectStore } from './project'
 
 export interface BeatCard {
   id: string
@@ -57,8 +58,6 @@ export const LINE_HEIGHT = 16
 export const MIN_BEAT_LINES = 1
 export const MIN_BEAT_HEIGHT_PX = LINE_HEIGHT * MIN_BEAT_LINES
 
-const STORAGE_KEY = 'story-studio-beats-linegrid-v1'
-
 let nextCardNum = 1
 
 function createCardId(): string {
@@ -101,18 +100,15 @@ function isStoredCard(card: unknown): card is BeatCard {
   )
 }
 
-function loadFromStorage(): StoredBeatState {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return { version: 1, cards: [] }
-    const parsed = JSON.parse(raw) as Partial<StoredBeatState>
-    if (parsed.version !== 1 || !Array.isArray(parsed.cards)) {
-      return { version: 1, cards: [] }
-    }
-    return { version: 1, cards: parsed.cards.filter(isStoredCard) }
-  } catch {
-    return { version: 1, cards: [] }
-  }
+function normalizeStoredBeatState(value: unknown): StoredBeatState {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return { version: 1, cards: [] }
+  const parsed = value as Partial<StoredBeatState>
+  if (parsed.version !== 1 || !Array.isArray(parsed.cards)) return { version: 1, cards: [] }
+  return { version: 1, cards: parsed.cards.filter(isStoredCard) }
+}
+
+function resetIdCounters(): void {
+  nextCardNum = 1
 }
 
 function restoreIdCounters(cards: BeatCard[]): void {
@@ -131,23 +127,26 @@ function sequenceBodyStart(range: SequenceRange): number {
 }
 
 export const useBeatStore = defineStore('beat', () => {
-  const stored = loadFromStorage()
-  restoreIdCounters(stored.cards)
-
-  const cards = ref<BeatCard[]>(stored.cards)
+  const cards = ref<BeatCard[]>([])
   const sequenceRanges = ref<SequenceRange[]>([])
 
-  let saveTimer: ReturnType<typeof setTimeout> | null = null
+  function toProjectData(): StoredBeatState {
+    return {
+      version: 1,
+      cards: cards.value
+    }
+  }
+
+  function hydrateFromProject(data: unknown): void {
+    const state = normalizeStoredBeatState(data)
+    resetIdCounters()
+    restoreIdCounters(state.cards)
+    cards.value = state.cards
+    sequenceRanges.value = []
+  }
 
   function save(): void {
-    if (saveTimer) clearTimeout(saveTimer)
-    saveTimer = setTimeout(() => {
-      const state: StoredBeatState = {
-        version: 1,
-        cards: cards.value,
-      }
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
-    }, 500)
+    useProjectStore().scheduleSave()
   }
 
   function cardById(id: string): BeatCard | undefined {
@@ -166,13 +165,13 @@ export const useBeatStore = defineStore('beat', () => {
 
   function sequenceForLine(lineIndex: number): SequenceRange | undefined {
     return sequenceRanges.value.find(
-      (range) => range.startLine <= lineIndex && lineIndex < range.endLine,
+      (range) => range.startLine <= lineIndex && lineIndex < range.endLine
     )
   }
 
   function sequenceForGap(gapIndex: number): SequenceRange | undefined {
     return sequenceRanges.value.find(
-      (range) => sequenceBodyStart(range) <= gapIndex && gapIndex <= range.endLine,
+      (range) => sequenceBodyStart(range) <= gapIndex && gapIndex <= range.endLine
     )
   }
 
@@ -235,10 +234,7 @@ export const useBeatStore = defineStore('beat', () => {
     })
   }
 
-  function setSequenceRanges(
-    ranges: SequenceRange[],
-    options: { normalize?: boolean } = {},
-  ): void {
+  function setSequenceRanges(ranges: SequenceRange[], options: { normalize?: boolean } = {}): void {
     const previousRanges = sequenceRanges.value
     const sorted = [...ranges].sort((a, b) => a.startLine - b.startLine)
     if (rangesEqual(previousRanges, sorted)) return
@@ -279,7 +275,7 @@ export const useBeatStore = defineStore('beat', () => {
         startLine,
         endLine,
         sceneStart: false,
-        content: DEFAULT_BEAT_CONTENT,
+        content: DEFAULT_BEAT_CONTENT
       })
       changed = true
     }
@@ -322,7 +318,7 @@ export const useBeatStore = defineStore('beat', () => {
       startLine,
       endLine: startLine + height,
       sceneStart,
-      content: DEFAULT_BEAT_CONTENT,
+      content: DEFAULT_BEAT_CONTENT
     }
 
     cards.value.push(newCard)
@@ -388,8 +384,7 @@ export const useBeatStore = defineStore('beat', () => {
     const next = cardById(boundary.nextCardId)
     if (!previous || !next || previous.seqId !== next.seqId) return false
     return (
-      lineIndex >= previous.startLine + MIN_BEAT_LINES &&
-      lineIndex <= next.endLine - MIN_BEAT_LINES
+      lineIndex >= previous.startLine + MIN_BEAT_LINES && lineIndex <= next.endLine - MIN_BEAT_LINES
     )
   }
 
@@ -428,18 +423,18 @@ export const useBeatStore = defineStore('beat', () => {
   function splitBeatAtLineGap(
     seqId: string,
     gapIndex: number,
-    sceneStart = false,
+    sceneStart = false
   ): SplitBeatResult {
     if (!sequenceById(seqId)) return { ok: false, reason: 'no-sequence' }
 
     const sequenceCards = cardsForSequence(seqId)
     const boundaryCard = sequenceCards.find(
-      (card) => gapIndex === card.startLine || gapIndex === card.endLine,
+      (card) => gapIndex === card.startLine || gapIndex === card.endLine
     )
     if (boundaryCard) return { ok: false, reason: 'at-boundary' }
 
     const target = sequenceCards.find(
-      (card) => card.startLine < gapIndex && gapIndex < card.endLine,
+      (card) => card.startLine < gapIndex && gapIndex < card.endLine
     )
     if (!target) return { ok: false, reason: 'no-card' }
 
@@ -456,7 +451,7 @@ export const useBeatStore = defineStore('beat', () => {
       startLine: gapIndex,
       endLine: target.endLine,
       sceneStart,
-      content: DEFAULT_BEAT_CONTENT,
+      content: DEFAULT_BEAT_CONTENT
     }
 
     target.endLine = gapIndex
@@ -471,10 +466,7 @@ export const useBeatStore = defineStore('beat', () => {
     return result.ok ? result.cardId : null
   }
 
-  function resolveAddBeatBoundaryAtLineGap(
-    seqId: string,
-    gapIndex: number,
-  ): AddBeatBoundaryResult {
+  function resolveAddBeatBoundaryAtLineGap(seqId: string, gapIndex: number): AddBeatBoundaryResult {
     const range = sequenceById(seqId)
     if (!range) return { ok: false, reason: 'no-sequence' }
     if (gapIndex < sequenceBodyStart(range) || gapIndex > range.endLine) {
@@ -485,12 +477,12 @@ export const useBeatStore = defineStore('beat', () => {
     if (sequenceCards.length === 0) return { ok: false, reason: 'no-card' }
 
     const boundaryCard = sequenceCards.find(
-      (card) => gapIndex === card.startLine || gapIndex === card.endLine,
+      (card) => gapIndex === card.startLine || gapIndex === card.endLine
     )
     if (boundaryCard) return { ok: false, reason: 'at-boundary' }
 
     const target = sequenceCards.find(
-      (card) => card.startLine < gapIndex && gapIndex < card.endLine,
+      (card) => card.startLine < gapIndex && gapIndex < card.endLine
     )
     if (target) {
       if (
@@ -516,7 +508,7 @@ export const useBeatStore = defineStore('beat', () => {
   function addBeatBoundaryAtLineGap(
     seqId: string,
     gapIndex: number,
-    sceneStart = false,
+    sceneStart = false
   ): AddBeatBoundaryResult {
     const resolved = resolveAddBeatBoundaryAtLineGap(seqId, gapIndex)
     if (!resolved.ok) return resolved
@@ -537,7 +529,7 @@ export const useBeatStore = defineStore('beat', () => {
       startLine: lastCard.endLine,
       endLine: gapIndex,
       sceneStart,
-      content: DEFAULT_BEAT_CONTENT,
+      content: DEFAULT_BEAT_CONTENT
     }
 
     cards.value.push(newCard)
@@ -550,7 +542,7 @@ export const useBeatStore = defineStore('beat', () => {
     if (deltaLines === 0) return
     const sequenceCards = cardsForSequence(seqId)
     const target = sequenceCards.find(
-      (card) => card.startLine <= editLine && editLine < card.endLine,
+      (card) => card.startLine <= editLine && editLine < card.endLine
     )
     if (!target) return
 
@@ -597,7 +589,7 @@ export const useBeatStore = defineStore('beat', () => {
         result.set(card.id, {
           sceneNum,
           beatNum,
-          label: `S${sceneNum}#${beatNum}`,
+          label: `S${sceneNum}#${beatNum}`
         })
       }
     }
@@ -609,6 +601,8 @@ export const useBeatStore = defineStore('beat', () => {
     cards,
     sequenceRanges,
     numbering,
+    hydrateFromProject,
+    toProjectData,
     cardById,
     cardsForSequence,
     sequenceById,
@@ -627,6 +621,6 @@ export const useBeatStore = defineStore('beat', () => {
     resolveAddBeatBoundaryAtLineGap,
     addBeatBoundaryAtLineGap,
     applyLineDelta,
-    updateCardContent,
+    updateCardContent
   }
 })

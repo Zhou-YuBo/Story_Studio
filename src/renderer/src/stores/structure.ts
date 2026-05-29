@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
+import { useProjectStore } from './project'
 
 export type StructureOwnerType = 'project' | 'act' | 'sequence' | 'scene'
 
@@ -98,13 +99,7 @@ interface StructureState {
   storyCore: StoryCoreFields
 }
 
-export const MORANDY_COLORS = [
-  '#a8b5a2',
-  '#b8a9c9',
-  '#c9b8a8',
-  '#a8bcc9',
-  '#c9a8a8',
-]
+export const MORANDY_COLORS = ['#a8b5a2', '#b8a9c9', '#c9b8a8', '#a8bcc9', '#c9a8a8']
 
 const VALUE_AXIS_COLORS = [
   '#a78bfa',
@@ -114,13 +109,11 @@ const VALUE_AXIS_COLORS = [
   '#fb7185',
   '#22d3ee',
   '#c084fc',
-  '#f97316',
+  '#f97316'
 ]
 
 const ACT_LABELS = ['第一幕', '第二幕', '第三幕', '第四幕', '第五幕', '第六幕', '第七幕', '第八幕']
 
-const STORAGE_KEY = 'story-studio-structure-v2'
-const LEGACY_STORAGE_KEY = 'story-studio-structure'
 const PROJECT_OWNER_ID = 'current-project'
 
 let nextActNum = 1
@@ -139,7 +132,7 @@ function createEmptyStoryCore(): StoryCoreFields {
     controllingIdeaReason: '',
     counterIdea: '',
     counterIdeaReason: '',
-    coreValueAxisIds: [],
+    coreValueAxisIds: []
   }
 }
 
@@ -149,7 +142,7 @@ function createEmptyActCore(): ActCoreFields {
     startState: '',
     endState: '',
     endingTest: '',
-    synopsis: '',
+    synopsis: ''
   }
 }
 
@@ -159,13 +152,13 @@ function createEmptySequenceCore(): SequenceCoreFields {
     turningPoint: '',
     endState: '',
     endingTest: '',
-    synopsis: '',
+    synopsis: ''
   }
 }
 
 function createEmptySceneCore(): SceneCoreFields {
   return {
-    summary: '',
+    summary: ''
   }
 }
 
@@ -176,7 +169,7 @@ function createEmptyState(): StructureState {
     valueAxes: [],
     visibleValueAxisIds: {},
     valuePoints: [],
-    storyCore: createEmptyStoryCore(),
+    storyCore: createEmptyStoryCore()
   }
 }
 
@@ -197,7 +190,7 @@ function normalizeStoryCore(value: unknown): StoryCoreFields {
     counterIdeaReason: typeof core.counterIdeaReason === 'string' ? core.counterIdeaReason : '',
     coreValueAxisIds: Array.isArray(core.coreValueAxisIds)
       ? core.coreValueAxisIds.filter((id): id is string => typeof id === 'string').slice(0, 5)
-      : [],
+      : []
   }
 }
 
@@ -211,7 +204,7 @@ function normalizeActCore(value: unknown): ActCoreFields {
     startState: typeof core.startState === 'string' ? core.startState : '',
     endState: typeof core.endState === 'string' ? core.endState : '',
     endingTest: typeof core.endingTest === 'string' ? core.endingTest : '',
-    synopsis: typeof core.synopsis === 'string' ? core.synopsis : '',
+    synopsis: typeof core.synopsis === 'string' ? core.synopsis : ''
   }
 }
 
@@ -225,7 +218,7 @@ function normalizeSequenceCore(value: unknown): SequenceCoreFields {
     turningPoint: typeof core.turningPoint === 'string' ? core.turningPoint : '',
     endState: typeof core.endState === 'string' ? core.endState : '',
     endingTest: typeof core.endingTest === 'string' ? core.endingTest : '',
-    synopsis: typeof core.synopsis === 'string' ? core.synopsis : '',
+    synopsis: typeof core.synopsis === 'string' ? core.synopsis : ''
   }
 }
 
@@ -235,7 +228,7 @@ function normalizeSceneCore(value: unknown): SceneCoreFields {
 
   const core = value as Partial<SceneCoreFields>
   return {
-    summary: typeof core.summary === 'string' ? core.summary : '',
+    summary: typeof core.summary === 'string' ? core.summary : ''
   }
 }
 
@@ -248,7 +241,7 @@ function normalizeBeat(value: unknown): StructureBeat | null {
   return {
     id: beat.id,
     label: beat.label,
-    summary: typeof beat.summary === 'string' ? beat.summary : '',
+    summary: typeof beat.summary === 'string' ? beat.summary : ''
   }
 }
 
@@ -262,7 +255,9 @@ function normalizeScene(value: unknown): StructureScene | null {
     id: scene.id,
     label: scene.label,
     core: normalizeSceneCore(scene.core),
-    beats: Array.isArray(scene.beats) ? scene.beats.map(normalizeBeat).filter((beat) => beat !== null) : [],
+    beats: Array.isArray(scene.beats)
+      ? scene.beats.map(normalizeBeat).filter((beat) => beat !== null)
+      : []
   }
 }
 
@@ -276,8 +271,10 @@ function normalizeSequence(value: unknown): StructureSequence | null {
     id: seq.id,
     label: seq.label,
     color: typeof seq.color === 'string' ? seq.color : MORANDY_COLORS[0],
-    scenes: Array.isArray(seq.scenes) ? seq.scenes.map(normalizeScene).filter((scene) => scene !== null) : [],
-    core: normalizeSequenceCore(seq.core),
+    scenes: Array.isArray(seq.scenes)
+      ? seq.scenes.map(normalizeScene).filter((scene) => scene !== null)
+      : [],
+    core: normalizeSequenceCore(seq.core)
   }
 }
 
@@ -291,8 +288,10 @@ function normalizeAct(value: unknown): StructureAct | null {
     id: act.id,
     label: act.label,
     color: typeof act.color === 'string' ? act.color : MORANDY_COLORS[0],
-    sequences: Array.isArray(act.sequences) ? act.sequences.map(normalizeSequence).filter((seq) => seq !== null) : [],
-    core: normalizeActCore(act.core),
+    sequences: Array.isArray(act.sequences)
+      ? act.sequences.map(normalizeSequence).filter((seq) => seq !== null)
+      : [],
+    core: normalizeActCore(act.core)
   }
 }
 
@@ -302,37 +301,25 @@ function normalizeState(value: unknown): StructureState {
   const state = value as Partial<StructureState>
   return {
     version: 2,
-    acts: Array.isArray(state.acts) ? state.acts.map(normalizeAct).filter((act) => act !== null) : [],
+    acts: Array.isArray(state.acts)
+      ? state.acts.map(normalizeAct).filter((act) => act !== null)
+      : [],
     valueAxes: Array.isArray(state.valueAxes) ? state.valueAxes : [],
     visibleValueAxisIds:
       state.visibleValueAxisIds && typeof state.visibleValueAxisIds === 'object'
         ? state.visibleValueAxisIds
         : {},
     valuePoints: Array.isArray(state.valuePoints) ? state.valuePoints : [],
-    storyCore: normalizeStoryCore(state.storyCore),
+    storyCore: normalizeStoryCore(state.storyCore)
   }
 }
 
-function loadFromStorage(): StructureState {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw) return normalizeState(JSON.parse(raw))
-
-    const legacyRaw = localStorage.getItem(LEGACY_STORAGE_KEY)
-    if (!legacyRaw) return createEmptyState()
-
-    const legacyActs = JSON.parse(legacyRaw)
-    return {
-      ...createEmptyState(),
-      acts: Array.isArray(legacyActs) ? legacyActs : [],
-    }
-  } catch {
-    return createEmptyState()
-  }
-}
-
-function saveToStorage(state: StructureState) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
+function resetIdCounters(): void {
+  nextActNum = 1
+  nextSeqNum = 1
+  nextSceneNum = 1
+  nextBeatNum = 1
+  nextAxisNum = 1
 }
 
 function restoreIdCounters(acts: StructureAct[], axes: ValueAxis[]) {
@@ -370,7 +357,7 @@ function clampValue(value: number): number {
 function createDefaultAxis(
   ownerType: StructureOwnerType,
   ownerId: string,
-  order: number,
+  order: number
 ): ValueAxis {
   return {
     id: `axis-${nextAxisNum++}`,
@@ -379,13 +366,12 @@ function createDefaultAxis(
     positiveLabel: '价值',
     negativeLabel: '反价值',
     color: VALUE_AXIS_COLORS[order % VALUE_AXIS_COLORS.length],
-    order,
+    order
   }
 }
 
 export const useStructureStore = defineStore('structure', () => {
-  const initialState = loadFromStorage()
-  restoreIdCounters(initialState.acts, initialState.valueAxes)
+  const initialState = createEmptyState()
 
   const acts = ref<StructureAct[]>(initialState.acts)
   const valueAxes = ref<ValueAxis[]>(initialState.valueAxes)
@@ -393,20 +379,33 @@ export const useStructureStore = defineStore('structure', () => {
   const valuePoints = ref<ValuePoint[]>(initialState.valuePoints)
   const storyCore = ref<StoryCoreFields>(initialState.storyCore)
 
-  function save() {
-    saveToStorage({
+  function toProjectData(): StructureState {
+    return {
       version: 2,
       acts: acts.value,
       valueAxes: valueAxes.value,
       visibleValueAxisIds: visibleValueAxisIds.value,
       valuePoints: valuePoints.value,
-      storyCore: storyCore.value,
-    })
+      storyCore: storyCore.value
+    }
   }
 
-  const totalSequences = computed(() =>
-    acts.value.reduce((sum, a) => sum + a.sequences.length, 0),
-  )
+  function hydrateFromProject(data: unknown): void {
+    const state = normalizeState(data)
+    resetIdCounters()
+    restoreIdCounters(state.acts, state.valueAxes)
+    acts.value = state.acts
+    valueAxes.value = state.valueAxes
+    visibleValueAxisIds.value = state.visibleValueAxisIds
+    valuePoints.value = state.valuePoints
+    storyCore.value = state.storyCore
+  }
+
+  function save() {
+    useProjectStore().scheduleSave()
+  }
+
+  const totalSequences = computed(() => acts.value.reduce((sum, a) => sum + a.sequences.length, 0))
 
   const flatSequences = computed(() =>
     acts.value.flatMap((a) =>
@@ -416,9 +415,9 @@ export const useStructureStore = defineStore('structure', () => {
         actColor: a.color,
         seqId: s.id,
         seqLabel: s.label,
-        seqColor: s.color,
-      })),
-    ),
+        seqColor: s.color
+      }))
+    )
   )
 
   function addAct() {
@@ -433,10 +432,10 @@ export const useStructureStore = defineStore('structure', () => {
           label: '序列 1',
           color: MORANDY_COLORS[(idx + 1) % MORANDY_COLORS.length],
           scenes: [],
-          core: createEmptySequenceCore(),
-        },
+          core: createEmptySequenceCore()
+        }
       ],
-      core: createEmptyActCore(),
+      core: createEmptyActCore()
     }
     acts.value.push(act)
     save()
@@ -461,7 +460,7 @@ export const useStructureStore = defineStore('structure', () => {
       label: `序列 ${idx + 1}`,
       color: MORANDY_COLORS[idx % MORANDY_COLORS.length],
       scenes: [],
-      core: createEmptySequenceCore(),
+      core: createEmptySequenceCore()
     })
     save()
   }
@@ -469,7 +468,8 @@ export const useStructureStore = defineStore('structure', () => {
   function removeSequence(actId: string, seqId: string) {
     const act = acts.value.find((a) => a.id === actId)
     if (!act) return
-    const sceneIds = act.sequences.find((s) => s.id === seqId)?.scenes.map((scene) => scene.id) ?? []
+    const sceneIds =
+      act.sequences.find((s) => s.id === seqId)?.scenes.map((scene) => scene.id) ?? []
     act.sequences = act.sequences.filter((s) => s.id !== seqId)
     cleanupOwner('sequence', seqId)
     for (const sceneId of sceneIds) cleanupOwner('scene', sceneId)
@@ -485,7 +485,7 @@ export const useStructureStore = defineStore('structure', () => {
       id: `scene-${nextSceneNum++}`,
       label: `场景 ${seq.scenes.length + 1}`,
       core: createEmptySceneCore(),
-      beats: [],
+      beats: []
     }
     seq.scenes.push(scene)
     save()
@@ -495,7 +495,8 @@ export const useStructureStore = defineStore('structure', () => {
   function removeScene(actId: string, seqId: string, sceneId: string) {
     const seq = acts.value.find((a) => a.id === actId)?.sequences.find((s) => s.id === seqId)
     if (!seq) return
-    const beatIds = seq.scenes.find((scene) => scene.id === sceneId)?.beats.map((beat) => beat.id) ?? []
+    const beatIds =
+      seq.scenes.find((scene) => scene.id === sceneId)?.beats.map((beat) => beat.id) ?? []
     seq.scenes = seq.scenes.filter((scene) => scene.id !== sceneId)
     cleanupOwner('scene', sceneId)
     for (const beatId of beatIds) removeValuePointsForTarget('scene', beatId)
@@ -512,7 +513,7 @@ export const useStructureStore = defineStore('structure', () => {
     const beat: StructureBeat = {
       id: `beat-${nextBeatNum++}`,
       label: `节拍 ${scene.beats.length + 1}`,
-      summary: '',
+      summary: ''
     }
     scene.beats.push(beat)
     save()
@@ -535,7 +536,7 @@ export const useStructureStore = defineStore('structure', () => {
     seqId: string,
     sceneId: string,
     beatId: string,
-    summary: string,
+    summary: string
   ) {
     const scene = acts.value
       .find((a) => a.id === actId)
@@ -600,7 +601,7 @@ export const useStructureStore = defineStore('structure', () => {
     actId: string,
     seqId: string,
     field: SequenceCoreTextField,
-    value: string,
+    value: string
   ) {
     const seq = acts.value.find((a) => a.id === actId)?.sequences.find((s) => s.id === seqId)
     if (!seq) return
@@ -613,7 +614,7 @@ export const useStructureStore = defineStore('structure', () => {
     seqId: string,
     sceneId: string,
     field: SceneCoreTextField,
-    value: string,
+    value: string
   ) {
     const seq = acts.value.find((a) => a.id === actId)?.sequences.find((s) => s.id === seqId)
     const scene = seq?.scenes.find((item) => item.id === sceneId)
@@ -658,7 +659,7 @@ export const useStructureStore = defineStore('structure', () => {
 
     const key = getOwnerKey(axis.ownerType, axis.ownerId)
     visibleValueAxisIds.value[key] = (visibleValueAxisIds.value[key] ?? []).filter(
-      (id) => id !== axisId,
+      (id) => id !== axisId
     )
     normalizeAxisOrder(axis.ownerType, axis.ownerId)
     save()
@@ -685,7 +686,7 @@ export const useStructureStore = defineStore('structure', () => {
     ownerType: StructureOwnerType,
     ownerId: string,
     axisId: string,
-    force?: boolean,
+    force?: boolean
   ) {
     const key = getOwnerKey(ownerType, ownerId)
     const current = visibleValueAxisIds.value[key] ?? []
@@ -705,10 +706,10 @@ export const useStructureStore = defineStore('structure', () => {
     axisId: string,
     targetType: StructureOwnerType,
     targetId: string,
-    value: number,
+    value: number
   ) {
     const point = valuePoints.value.find(
-      (item) => item.axisId === axisId && item.targetId === targetId,
+      (item) => item.axisId === axisId && item.targetId === targetId
     )
 
     if (point) {
@@ -718,15 +719,17 @@ export const useStructureStore = defineStore('structure', () => {
         axisId,
         targetType,
         targetId,
-        value: clampValue(value),
+        value: clampValue(value)
       })
     }
     save()
   }
 
   function getValuePoint(axisId: string, targetId: string): number {
-    return valuePoints.value.find((point) => point.axisId === axisId && point.targetId === targetId)
-      ?.value ?? 0
+    return (
+      valuePoints.value.find((point) => point.axisId === axisId && point.targetId === targetId)
+        ?.value ?? 0
+    )
   }
 
   function updateStoryCoreField(field: StoryCoreTextField, value: string) {
@@ -769,7 +772,9 @@ export const useStructureStore = defineStore('structure', () => {
 
   function cleanupStoryCoreValueAxes() {
     const existingIds = new Set(valueAxes.value.map((axis) => axis.id))
-    storyCore.value.coreValueAxisIds = storyCore.value.coreValueAxisIds.filter((id) => existingIds.has(id))
+    storyCore.value.coreValueAxisIds = storyCore.value.coreValueAxisIds.filter((id) =>
+      existingIds.has(id)
+    )
   }
 
   function cleanupOwner(ownerType: StructureOwnerType, ownerId: string) {
@@ -781,7 +786,7 @@ export const useStructureStore = defineStore('structure', () => {
 
   function removeValuePointsForTarget(targetType: StructureOwnerType, targetId: string) {
     valuePoints.value = valuePoints.value.filter(
-      (point) => !(point.targetType === targetType && point.targetId === targetId),
+      (point) => !(point.targetType === targetType && point.targetId === targetId)
     )
   }
 
@@ -799,6 +804,8 @@ export const useStructureStore = defineStore('structure', () => {
     storyCore,
     totalSequences,
     flatSequences,
+    hydrateFromProject,
+    toProjectData,
     addAct,
     removeAct,
     addSequence,
@@ -829,7 +836,7 @@ export const useStructureStore = defineStore('structure', () => {
     addStoryCoreValueAxis,
     removeStoryCoreValueAxis,
     setPrimaryStoryCoreValueAxis,
-    toggleStoryCoreValueAxis,
+    toggleStoryCoreValueAxis
   }
 })
 

@@ -1,14 +1,14 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
+import { useProjectStore } from './project'
 import { mockCharacters } from '../components/character/detail/mockCharacters'
 import type {
   CharacterDetail,
   CharacterDimensionSummaryItem,
   CharacterInformationGap,
-  CharacterLayer,
+  CharacterLayer
 } from '../components/character/detail/types'
 
-const CHARACTERS_KEY = 'story-studio-characters'
 let nextCharacterId = 1
 let nextDimensionId = 1
 let nextNoteId = 1
@@ -18,7 +18,7 @@ function createDefaultInformationGap(): CharacterInformationGap {
     knows: '',
     hides: '',
     misunderstands: '',
-    audienceKnows: '',
+    audienceKnows: ''
   }
 }
 
@@ -31,33 +31,29 @@ function normalizeCharacters(characters: CharacterDetail[]): CharacterDetail[] {
     ...character,
     informationGap: {
       ...createDefaultInformationGap(),
-      ...(character.informationGap ?? {}),
+      ...(character.informationGap ?? {})
     },
     dimensions: character.dimensions.map((dimension, index) => ({
       ...dimension,
       note: dimension.note ?? '',
       core: dimension.core ?? index === 0,
-      inverted: dimension.inverted ?? false,
-    })),
+      inverted: dimension.inverted ?? false
+    }))
   }))
 }
 
-function loadCharactersFromStorage(): CharacterDetail[] {
-  try {
-    const raw = localStorage.getItem(CHARACTERS_KEY)
-    if (!raw) return cloneCharacters(mockCharacters)
-    const parsed = JSON.parse(raw)
-    if (!Array.isArray(parsed)) return cloneCharacters(mockCharacters)
-    return normalizeCharacters(parsed)
-  } catch {
+function normalizeCharacterProjectData(data: unknown): CharacterDetail[] {
+  if (!data || typeof data !== 'object' || Array.isArray(data))
     return cloneCharacters(mockCharacters)
-  }
+  const characters = (data as { characters?: unknown }).characters
+  if (!Array.isArray(characters) || characters.length === 0) return cloneCharacters(mockCharacters)
+  return normalizeCharacters(characters as CharacterDetail[])
 }
 
-function saveCharactersToStorage(characters: CharacterDetail[]) {
-  try {
-    localStorage.setItem(CHARACTERS_KEY, JSON.stringify(characters))
-  } catch {}
+function resetCounters(): void {
+  nextCharacterId = 1
+  nextDimensionId = 1
+  nextNoteId = 1
 }
 
 function restoreCounters(characters: CharacterDetail[]) {
@@ -78,13 +74,28 @@ function restoreCounters(characters: CharacterDetail[]) {
 }
 
 export const useCharacterStore = defineStore('character', () => {
-  const characters = ref<CharacterDetail[]>(loadCharactersFromStorage())
+  const characters = ref<CharacterDetail[]>(cloneCharacters(mockCharacters))
   const activeCharacterId = ref(characters.value[0]?.id ?? '')
 
+  resetCounters()
   restoreCounters(characters.value)
 
+  function hydrateFromProject(data: unknown): void {
+    const nextCharacters = normalizeCharacterProjectData(data)
+    resetCounters()
+    restoreCounters(nextCharacters)
+    characters.value = nextCharacters
+    activeCharacterId.value = characters.value[0]?.id ?? ''
+  }
+
+  function toProjectData() {
+    return {
+      characters: characters.value
+    }
+  }
+
   function saveCharacters() {
-    saveCharactersToStorage(characters.value)
+    useProjectStore().scheduleSave()
   }
 
   function getCharacterById(id: string): CharacterDetail | undefined {
@@ -95,26 +106,29 @@ export const useCharacterStore = defineStore('character', () => {
     if (getCharacterById(id)) activeCharacterId.value = id
   }
 
-  function createCharacter(name: string = '新人物', layer: CharacterLayer = '第三圈人物'): CharacterDetail {
+  function createCharacter(
+    name: string = '新人物',
+    layer: CharacterLayer = '第三圈人物'
+  ): CharacterDetail {
     const character: CharacterDetail = {
       id: `character-${nextCharacterId++}`,
       profile: {
         name,
         layer,
         brief: '',
-        logline: '',
+        logline: ''
       },
       truth: {
         coreSelf: '',
         socialSelf: '',
         personalSelf: '',
-        hiddenSelf: '',
+        hiddenSelf: ''
       },
       drive: {
         desire: '',
         fear: '',
         belief: '',
-        doubt: '',
+        doubt: ''
       },
       informationGap: createDefaultInformationGap(),
       dimensions: [],
@@ -123,9 +137,9 @@ export const useCharacterStore = defineStore('character', () => {
         sentenceLength: '',
         vocabulary: '',
         gestures: '',
-        possessions: '',
+        possessions: ''
       },
-      notes: [],
+      notes: []
     }
 
     characters.value.push(character)
@@ -144,7 +158,7 @@ export const useCharacterStore = defineStore('character', () => {
       positive: `价值 ${nextIndex}`,
       negative: `反价值 ${nextIndex}`,
       note: '',
-      core: character.dimensions.length === 0,
+      core: character.dimensions.length === 0
     }
 
     character.dimensions.push(dimension)
@@ -174,7 +188,9 @@ export const useCharacterStore = defineStore('character', () => {
       dimension.core = dimension.id === dimensionId
     }
 
-    const dimensionIndex = character.dimensions.findIndex((dimension) => dimension.id === dimensionId)
+    const dimensionIndex = character.dimensions.findIndex(
+      (dimension) => dimension.id === dimensionId
+    )
     if (dimensionIndex > 0) {
       const [dimension] = character.dimensions.splice(dimensionIndex, 1)
       character.dimensions.unshift(dimension)
@@ -187,9 +203,12 @@ export const useCharacterStore = defineStore('character', () => {
     const character = getCharacterById(characterId)
     if (!character) return
 
-    const dimensionIndex = character.dimensions.findIndex((dimension) => dimension.id === dimensionId)
+    const dimensionIndex = character.dimensions.findIndex(
+      (dimension) => dimension.id === dimensionId
+    )
     const targetIndex = dimensionIndex + direction
-    if (dimensionIndex <= 0 || targetIndex <= 0 || targetIndex >= character.dimensions.length) return
+    if (dimensionIndex <= 0 || targetIndex <= 0 || targetIndex >= character.dimensions.length)
+      return
 
     const [dimension] = character.dimensions.splice(dimensionIndex, 1)
     character.dimensions.splice(targetIndex, 0, dimension)
@@ -217,6 +236,8 @@ export const useCharacterStore = defineStore('character', () => {
     characters,
     activeCharacterId,
     saveCharacters,
+    hydrateFromProject,
+    toProjectData,
     getCharacterById,
     setActiveCharacter,
     createCharacter,
@@ -225,6 +246,6 @@ export const useCharacterStore = defineStore('character', () => {
     setCoreDimension,
     moveDimension,
     invertDimension,
-    addQuickNote,
+    addQuickNote
   }
 })

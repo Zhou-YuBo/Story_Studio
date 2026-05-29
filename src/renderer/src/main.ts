@@ -7,13 +7,24 @@ import App from './App.vue'
 import router from './router'
 
 import { createPinia } from 'pinia'
+import { useProjectStore } from './stores/project'
 
 applyCssVars(document.documentElement, buildCssVars())
 
-const app = createApp(App)
+async function bootstrap(): Promise<void> {
+  const app = createApp(App)
+  const pinia = createPinia()
 
-app.use(router)
+  app.use(router)
+  app.use(pinia)
 
-app.use(createPinia())
+  await useProjectStore(pinia).hydrate()
 
-app.mount('#app')
+  window.addEventListener('beforeunload', () => {
+    void useProjectStore(pinia).flushSave()
+  })
+
+  app.mount('#app')
+}
+
+void bootstrap()

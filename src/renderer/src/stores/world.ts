@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
+import { useProjectStore } from './project'
 import type { WorldCard, CanvasEdge, DrawingItem } from '../types/canvas'
 import { useCanvasCore } from '../composables/useCanvasCore'
 
@@ -41,25 +42,48 @@ const DEFAULT_CATEGORIES: WorldCategory[] = [
   { id: 'wcat-2', name: '观念', color: '#3b82f6' },
   { id: 'wcat-3', name: '规则', color: '#eab308' },
   { id: 'wcat-4', name: '事件', color: '#22c55e' },
-  { id: UNCATEGORIZED_ID, name: '未分类', color: '#6b7280' },
+  { id: UNCATEGORIZED_ID, name: '未分类', color: '#6b7280' }
 ]
 
-// ---- localStorage（世界特有数据）----
-const CATEGORIES_KEY = 'story-studio-world-categories'
-const OBJECTS_KEY = 'story-studio-world-objects'
-
-function loadFromStorage<T>(key: string): T[] {
-  try {
-    const raw = localStorage.getItem(key)
-    if (!raw) return []
-    return JSON.parse(raw)
-  } catch {
-    return []
-  }
+function cloneCategories(categories: WorldCategory[]): WorldCategory[] {
+  return categories.map((category) => ({ ...category }))
 }
 
-function saveToStorage(key: string, data: unknown) {
-  localStorage.setItem(key, JSON.stringify(data))
+function normalizeCategories(value: unknown): WorldCategory[] {
+  if (!Array.isArray(value) || value.length === 0) return cloneCategories(DEFAULT_CATEGORIES)
+  return value.filter((category): category is WorldCategory => {
+    if (!category || typeof category !== 'object') return false
+    const candidate = category as Partial<WorldCategory>
+    return (
+      typeof candidate.id === 'string' &&
+      typeof candidate.name === 'string' &&
+      typeof candidate.color === 'string'
+    )
+  })
+}
+
+function normalizeObjects(value: unknown): WorldObject[] {
+  if (!Array.isArray(value)) return []
+  return value.filter((object): object is WorldObject => {
+    if (!object || typeof object !== 'object') return false
+    const candidate = object as Partial<WorldObject>
+    return (
+      typeof candidate.id === 'string' &&
+      typeof candidate.categoryId === 'string' &&
+      typeof candidate.name === 'string' &&
+      (candidate.detailType === 'text' || candidate.detailType === 'image') &&
+      typeof candidate.detailContent === 'string'
+    )
+  })
+}
+
+function normalizeCanvases(value: unknown) {
+  return Array.isArray(value) ? value : []
+}
+
+function resetWorldIdCounters(): void {
+  nextCategoryId = 1
+  nextObjectId = 1
 }
 
 function restoreWorldIdCounters(categories: WorldCategory[], objects: WorldObject[]) {
@@ -76,25 +100,44 @@ function restoreWorldIdCounters(categories: WorldCategory[], objects: WorldObjec
 export const useWorldStore = defineStore('world', () => {
   const core = useCanvasCore<WorldCard>({
     idPrefix: { card: 'wcard-', edge: 'wedge-', canvas: 'wcanvas-' },
-    storageKey: 'story-studio-world-canvases',
     minCardSize: { width: 140, height: 70 },
+    onPersist: () => useProjectStore().scheduleSave()
   })
 
   // ---- 世界特有状态 ----
-  const categories = ref<WorldCategory[]>(loadFromStorage<WorldCategory>(CATEGORIES_KEY))
-  const objects = ref<WorldObject[]>(loadFromStorage<WorldObject>(OBJECTS_KEY))
+  const categories = ref<WorldCategory[]>(cloneCategories(DEFAULT_CATEGORIES))
+  const objects = ref<WorldObject[]>([])
   const openDetails = ref<ObjectDetailState[]>([])
   const detailZCounter = ref(100)
 
-  if (categories.value.length === 0) {
-    categories.value = [...DEFAULT_CATEGORIES]
-    saveToStorage(CATEGORIES_KEY, categories.value)
-  }
-
   restoreWorldIdCounters(categories.value, objects.value)
 
-  function saveCategories() { saveToStorage(CATEGORIES_KEY, categories.value) }
-  function saveObjects() { saveToStorage(OBJECTS_KEY, objects.value) }
+  function hydrateFromProject(data: unknown): void {
+    const source =
+      data && typeof data === 'object' && !Array.isArray(data)
+        ? (data as Record<string, unknown>)
+        : {}
+    resetWorldIdCounters()
+    categories.value = normalizeCategories(source.categories)
+    objects.value = normalizeObjects(source.objects)
+    core.hydrateCanvases(normalizeCanvases(source.canvases))
+    restoreWorldIdCounters(categories.value, objects.value)
+  }
+
+  function toProjectData() {
+    return {
+      categories: categories.value,
+      objects: objects.value,
+      canvases: core.toProjectCanvases()
+    }
+  }
+
+  function saveCategories() {
+    useProjectStore().scheduleSave()
+  }
+  function saveObjects() {
+    useProjectStore().scheduleSave()
+  }
 
   // ---- 颜色解析：三级优先级 ----
   function resolveCardColor(cardId: string): string {
@@ -115,7 +158,7 @@ export const useWorldStore = defineStore('world', () => {
       x,
       y,
       width: 220,
-      height: 120,
+      height: 120
     }
     core.pushCard(card)
     return card
@@ -174,7 +217,7 @@ export const useWorldStore = defineStore('world', () => {
       categoryId,
       name: name || '新对象',
       detailType: 'text',
-      detailContent: '',
+      detailContent: ''
     }
     objects.value.push(obj)
     saveObjects()
@@ -233,7 +276,7 @@ export const useWorldStore = defineStore('world', () => {
       objectId,
       x: 300 + offset,
       y: 100 + offset,
-      zIndex: ++detailZCounter.value,
+      zIndex: ++detailZCounter.value
     })
   }
 
@@ -269,6 +312,8 @@ export const useWorldStore = defineStore('world', () => {
     isDrawing: core.isDrawing,
     drawingPreview: core.drawingPreview,
     drawingConfig: core.drawingConfig,
+    hydrateFromProject,
+    toProjectData,
     createCanvas: core.createCanvas,
     openCanvas: core.openCanvas,
     saveCurrentCanvas: core.saveCurrentCanvas,
@@ -286,11 +331,26 @@ export const useWorldStore = defineStore('world', () => {
     confirmDiscard: core.confirmDiscard,
     confirmCancel: core.confirmCancel,
     // 世界特有
-    categories, objects, openDetails,
-    addCard, updateCardColor, resolveCardColor,
-    addCategory, renameCategory, deleteCategory, updateCategoryColor,
-    createObject, renameObject, deleteObject, updateObjectDetail, updateObjectColor,
-    getObjectsByCategory, getObjectById,
-    openDetail, closeDetail, moveDetail, bringDetailToFront,
+    categories,
+    objects,
+    openDetails,
+    addCard,
+    updateCardColor,
+    resolveCardColor,
+    addCategory,
+    renameCategory,
+    deleteCategory,
+    updateCategoryColor,
+    createObject,
+    renameObject,
+    deleteObject,
+    updateObjectDetail,
+    updateObjectColor,
+    getObjectsByCategory,
+    getObjectById,
+    openDetail,
+    closeDetail,
+    moveDetail,
+    bringDetailToFront
   }
 })

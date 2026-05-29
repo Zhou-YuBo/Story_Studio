@@ -5,6 +5,7 @@ import { storeToRefs } from 'pinia'
 import { ref, onBeforeUnmount, onMounted, watch, nextTick, computed } from 'vue'
 import { useEditorBridge } from '../../stores/editor-bridge'
 import { useLineGridStore } from '../../stores/line-grid'
+import { useProjectStore } from '../../stores/project'
 import { useStructureSync } from '../../composables/useStructureSync'
 import { General } from './extensions/general'
 import { SceneHeading } from './extensions/scene-heading'
@@ -31,6 +32,7 @@ import { LINE_GRID_CONFIG } from './line-grid/constants'
 const smartTypeState = createSmartTypeState()
 const editorBridge = useEditorBridge()
 const lineGridStore = useLineGridStore()
+const projectStore = useProjectStore()
 const { snapshot } = storeToRefs(lineGridStore)
 const scrollRef = ref<HTMLElement | null>(null)
 
@@ -47,8 +49,6 @@ const pageContainerStyle = computed(() => {
     '--editor-body-min-height': `${editorBodyMinHeight}px`
   }
 })
-
-const STORAGE_KEY = 'story-studio-scene-doc'
 
 const screenplayElements = [
   General,
@@ -70,14 +70,7 @@ const screenplayElements = [
 const defaultContent = { type: 'doc', content: [{ type: 'sceneHeading' }] }
 
 function loadContent(): typeof defaultContent | Record<string, unknown> {
-  const raw = localStorage.getItem(STORAGE_KEY)
-  if (!raw) return defaultContent
-  try {
-    return JSON.parse(raw)
-  } catch {
-    localStorage.removeItem(STORAGE_KEY)
-    return defaultContent
-  }
+  return projectStore.sceneDoc ?? defaultContent
 }
 
 const editor = useEditor({
@@ -134,7 +127,7 @@ watch(
       lineGridStore.rebuild(e.state.doc)
       if (saveTimer) clearTimeout(saveTimer)
       saveTimer = setTimeout(() => {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(e.getJSON()))
+        projectStore.setSceneDoc(e.getJSON())
       }, 200)
     }
     editorInstance.on('update', updateHandler)
@@ -150,7 +143,8 @@ onBeforeUnmount(() => {
     saveTimer = null
   }
   if (editor.value) {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(editor.value.getJSON()))
+    projectStore.setSceneDoc(editor.value.getJSON())
+    void projectStore.flushSave()
   }
   lineGridStore.reset()
   editorBridge.unregister()

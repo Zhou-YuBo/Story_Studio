@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import BottomDock from './components/common/BottomDock.vue'
+import ProjectStorageBar from './components/common/ProjectStorageBar.vue'
 import ReminderFloatingLayer from './components/reminder/ReminderFloatingLayer.vue'
 </script>
 
 <template>
   <div class="bg-black h-screen text-white flex flex-col overflow-hidden">
+    <ProjectStorageBar />
 
     <!-- 中央工作区 -->
     <main class="flex-1 overflow-hidden flex">
@@ -15,6 +17,5 @@ import ReminderFloatingLayer from './components/reminder/ReminderFloatingLayer.v
 
     <!-- 底部工作台栏 -->
     <BottomDock />
-
   </div>
 </template>

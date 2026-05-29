@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
+import { useProjectStore } from './project'
 
 export type CastUniverseRing = 1 | 2 | 3
 export type CastUniverseSettleResult = 'snapped' | 'free' | 'duplicate'
@@ -45,7 +46,6 @@ interface AddPlacedNodeOptions {
 export const CAST_UNIVERSE_CANVAS_SIZE = 1400
 export const CAST_UNIVERSE_CENTER = CAST_UNIVERSE_CANVAS_SIZE / 2
 
-const CAST_UNIVERSE_KEY = 'story-studio-character-cast-universe-v4'
 const SNAP_THRESHOLD = 72
 let nextNodeId = 1
 let nextSystemId = 1
@@ -166,22 +166,16 @@ function normalizeBoard(board: CastUniverseBoard): CastUniverseBoard {
   }
 }
 
-function loadBoardFromStorage(): CastUniverseBoard {
-  try {
-    const raw = localStorage.getItem(CAST_UNIVERSE_KEY)
-    if (!raw) return createDefaultBoard()
-    return normalizeBoard(JSON.parse(raw))
-  } catch {
-    return createDefaultBoard()
-  }
+function normalizeBoardProjectData(data: unknown): CastUniverseBoard {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return createDefaultBoard()
+  const board = (data as { board?: unknown }).board
+  if (!board || typeof board !== 'object' || Array.isArray(board)) return createDefaultBoard()
+  return normalizeBoard(board as CastUniverseBoard)
 }
 
-function saveBoardToStorage(board: CastUniverseBoard): void {
-  try {
-    localStorage.setItem(CAST_UNIVERSE_KEY, JSON.stringify(board))
-  } catch {
-    return
-  }
+function resetCounters(): void {
+  nextNodeId = 1
+  nextSystemId = 1
 }
 
 function restoreCounters(board: CastUniverseBoard): void {
@@ -230,12 +224,26 @@ function createCompleteDimensionSlots(
 }
 
 export const useCharacterCastUniverseStore = defineStore('characterCastUniverse', () => {
-  const board = ref<CastUniverseBoard>(loadBoardFromStorage())
+  const board = ref<CastUniverseBoard>(createDefaultBoard())
 
+  resetCounters()
   restoreCounters(board.value)
 
+  function hydrateFromProject(data: unknown): void {
+    resetCounters()
+    const nextBoard = normalizeBoardProjectData(data)
+    restoreCounters(nextBoard)
+    board.value = nextBoard
+  }
+
+  function toProjectData() {
+    return {
+      board: board.value
+    }
+  }
+
   function saveBoard(): void {
-    saveBoardToStorage(board.value)
+    useProjectStore().scheduleSave()
   }
 
   function getNodeById(nodeId: string): CastUniversePlacedNode | undefined {
@@ -460,6 +468,8 @@ export const useCharacterCastUniverseStore = defineStore('characterCastUniverse'
   return {
     board,
     saveBoard,
+    hydrateFromProject,
+    toProjectData,
     syncAvailableCharacters,
     addPlacedNode,
     updatePlacedNodePosition,

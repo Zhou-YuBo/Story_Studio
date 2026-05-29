@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
+import { useProjectStore } from './project'
 import type { InspirationCard, CanvasEdge, DrawingItem } from '../types/canvas'
 import { useCanvasCore } from '../composables/useCanvasCore'
 
@@ -30,13 +31,56 @@ export interface Note {
 let nextNoteId = 1
 let nextItemId = 100
 
+function cloneItems(items: InspirationItem[]): InspirationItem[] {
+  return JSON.parse(JSON.stringify(items))
+}
+
+function normalizeItems(value: unknown): InspirationItem[] {
+  if (!Array.isArray(value) || value.length === 0) return cloneItems(mockItems)
+  return value.filter((item): item is InspirationItem => {
+    if (!item || typeof item !== 'object') return false
+    const candidate = item as Partial<InspirationItem>
+    return (
+      typeof candidate.id === 'string' &&
+      typeof candidate.type === 'string' &&
+      typeof candidate.title === 'string' &&
+      typeof candidate.filePath === 'string' &&
+      typeof candidate.createdAt === 'string'
+    )
+  })
+}
+
+function normalizeNotes(value: unknown): Note[] {
+  if (!Array.isArray(value)) return []
+  return value.filter((note): note is Note => {
+    if (!note || typeof note !== 'object') return false
+    const candidate = note as Partial<Note>
+    return (
+      typeof candidate.id === 'string' &&
+      typeof candidate.content === 'string' &&
+      Array.isArray(candidate.sources) &&
+      typeof candidate.createdAt === 'string' &&
+      typeof candidate.updatedAt === 'string'
+    )
+  })
+}
+
+function normalizeCanvases(value: unknown) {
+  return Array.isArray(value) ? value : []
+}
+
+function resetCounters(): void {
+  nextNoteId = 1
+  nextItemId = 100
+}
+
 const mockItems: InspirationItem[] = [
   {
     id: 'src-1',
     type: 'image',
     title: '角色概念图',
     filePath: '/demo/concept.jpg',
-    createdAt: '2026-05-15',
+    createdAt: '2026-05-15'
   },
   {
     id: 'src-2',
@@ -45,14 +89,14 @@ const mockItems: InspirationItem[] = [
     filePath: '',
     content:
       '主角醒来发现自己在陌生房间，窗外景色每三分钟变换一次。他必须在对面的门关闭前逃出——但每次开门，里面走出的都是不同版本的他。',
-    createdAt: '2026-05-17',
+    createdAt: '2026-05-17'
   },
   {
     id: 'src-3',
     type: 'image',
     title: '场景参考：废弃教堂',
     filePath: '/demo/church.jpg',
-    createdAt: '2026-05-14',
+    createdAt: '2026-05-14'
   },
   {
     id: 'src-4',
@@ -60,7 +104,7 @@ const mockItems: InspirationItem[] = [
     title: '神话学研究笔记.pdf',
     filePath: '/demo/myth-study.pdf',
     content: 'Joseph Campbell 英雄旅程十二阶段摘要',
-    createdAt: '2026-05-12',
+    createdAt: '2026-05-12'
   },
   {
     id: 'src-5',
@@ -68,43 +112,55 @@ const mockItems: InspirationItem[] = [
     title: '氛围参考：雨夜低语',
     filePath: '/demo/rain-night.mp3',
     content: '氛围音效 · 3:42',
-    createdAt: '2026-05-18',
-  },
-]
-
-const NOTES_KEY = 'story-studio-notes'
-
-function loadNotesFromStorage(): Note[] {
-  try {
-    const raw = localStorage.getItem(NOTES_KEY)
-    if (!raw) return []
-    return JSON.parse(raw)
-  } catch {
-    return []
+    createdAt: '2026-05-18'
   }
-}
-
-function saveNotesToStorage(notes: Note[]) {
-  localStorage.setItem(NOTES_KEY, JSON.stringify(notes))
-}
+]
 
 export const useInspirationStore = defineStore('inspiration', () => {
   const core = useCanvasCore<InspirationCard>({
     idPrefix: { card: 'card-', edge: 'edge-', canvas: 'canvas-' },
-    storageKey: 'story-studio-canvases',
     minCardSize: { width: 160, height: 80 },
+    onPersist: () => useProjectStore().scheduleSave()
   })
 
   // ---- 灵感特有状态 ----
-  const items = ref<InspirationItem[]>([...mockItems])
-  const notes = ref<Note[]>(loadNotesFromStorage())
+  const items = ref<InspirationItem[]>(cloneItems(mockItems))
+  const notes = ref<Note[]>([])
   const editingNoteId = ref<string | null>(null)
   const highlightCardIds = ref<string[]>([])
 
-  for (const n of notes.value) {
-    const num = parseInt(n.id.replace('note-', ''))
-    if (!isNaN(num)) nextNoteId = Math.max(nextNoteId, num + 1)
+  function restoreCounters(): void {
+    for (const n of notes.value) {
+      const num = parseInt(n.id.replace('note-', ''))
+      if (!isNaN(num)) nextNoteId = Math.max(nextNoteId, num + 1)
+    }
+    for (const item of items.value) {
+      const num = parseInt(item.id.replace('item-', ''))
+      if (!isNaN(num)) nextItemId = Math.max(nextItemId, num + 1)
+    }
   }
+
+  function hydrateFromProject(data: unknown): void {
+    const source =
+      data && typeof data === 'object' && !Array.isArray(data)
+        ? (data as Record<string, unknown>)
+        : {}
+    resetCounters()
+    items.value = normalizeItems(source.items)
+    notes.value = normalizeNotes(source.notes)
+    core.hydrateCanvases(normalizeCanvases(source.canvases))
+    restoreCounters()
+  }
+
+  function toProjectData() {
+    return {
+      items: items.value,
+      notes: notes.value,
+      canvases: core.toProjectCanvases()
+    }
+  }
+
+  restoreCounters()
 
   // ---- 灵感特有：卡片创建 ----
   function addCard(inspirationId: string, x: number, y: number): InspirationCard {
@@ -114,7 +170,7 @@ export const useInspirationStore = defineStore('inspiration', () => {
       x,
       y,
       width: 260,
-      height: inspirationId.startsWith('src-2') ? 120 : 160,
+      height: inspirationId.startsWith('src-2') ? 120 : 160
     }
     core.pushCard(card)
     return card
@@ -132,15 +188,19 @@ export const useInspirationStore = defineStore('inspiration', () => {
       title: '自由文本',
       filePath: '',
       content,
-      createdAt: new Date().toISOString().slice(0, 10),
+      createdAt: new Date().toISOString().slice(0, 10)
     }
     items.value.push(item)
+    useProjectStore().scheduleSave()
     return item
   }
 
   function updateItemContent(id: string, content: string) {
     const item = items.value.find((i) => i.id === id)
-    if (item) item.content = content
+    if (item) {
+      item.content = content
+      useProjectStore().scheduleSave()
+    }
   }
 
   // ---- 灵感特有：笔记系统 ----
@@ -150,10 +210,10 @@ export const useInspirationStore = defineStore('inspiration', () => {
       content: '',
       sources: [],
       createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
     }
     notes.value.push(note)
-    saveNotesToStorage(notes.value)
+    useProjectStore().scheduleSave()
     return note
   }
 
@@ -162,13 +222,13 @@ export const useInspirationStore = defineStore('inspiration', () => {
     if (note) {
       note.content = content
       note.updatedAt = new Date().toISOString()
-      saveNotesToStorage(notes.value)
+      useProjectStore().scheduleSave()
     }
   }
 
   function deleteNote(id: string) {
     notes.value = notes.value.filter((n) => n.id !== id)
-    saveNotesToStorage(notes.value)
+    useProjectStore().scheduleSave()
     if (editingNoteId.value === id) editingNoteId.value = null
   }
 
@@ -176,12 +236,12 @@ export const useInspirationStore = defineStore('inspiration', () => {
     const note = notes.value.find((n) => n.id === noteId)
     if (!note) return
     const exists = note.sources.find(
-      (s) => s.canvasId === canvasId && JSON.stringify(s.cardIds) === JSON.stringify(cardIds),
+      (s) => s.canvasId === canvasId && JSON.stringify(s.cardIds) === JSON.stringify(cardIds)
     )
     if (exists) return
     note.sources.push({ canvasId, cardIds })
     note.updatedAt = new Date().toISOString()
-    saveNotesToStorage(notes.value)
+    useProjectStore().scheduleSave()
   }
 
   function removeNoteSource(noteId: string, index: number) {
@@ -189,7 +249,7 @@ export const useInspirationStore = defineStore('inspiration', () => {
     if (!note) return
     note.sources.splice(index, 1)
     note.updatedAt = new Date().toISOString()
-    saveNotesToStorage(notes.value)
+    useProjectStore().scheduleSave()
   }
 
   function getNotesForCanvas(canvasId: string): Note[] {
@@ -209,6 +269,8 @@ export const useInspirationStore = defineStore('inspiration', () => {
     isDrawing: core.isDrawing,
     drawingPreview: core.drawingPreview,
     drawingConfig: core.drawingConfig,
+    hydrateFromProject,
+    toProjectData,
     createCanvas: core.createCanvas,
     openCanvas: core.openCanvas,
     saveCurrentCanvas: core.saveCurrentCanvas,
@@ -226,8 +288,19 @@ export const useInspirationStore = defineStore('inspiration', () => {
     confirmDiscard: core.confirmDiscard,
     confirmCancel: core.confirmCancel,
     // 灵感特有
-    items, notes, editingNoteId, highlightCardIds,
-    addCard, getItemById, createTextItem, updateItemContent,
-    createNote, updateNoteContent, deleteNote, addNoteSource, removeNoteSource, getNotesForCanvas,
+    items,
+    notes,
+    editingNoteId,
+    highlightCardIds,
+    addCard,
+    getItemById,
+    createTextItem,
+    updateItemContent,
+    createNote,
+    updateNoteContent,
+    deleteNote,
+    addNoteSource,
+    removeNoteSource,
+    getNotesForCanvas
   }
 })

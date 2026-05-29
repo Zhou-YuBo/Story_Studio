@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
+import { useProjectStore } from './project'
 
 export type ReminderStatus = 'draft' | 'enabled'
 
@@ -48,7 +49,6 @@ export interface SceneReminderContext {
   seqId: string
 }
 
-const STORAGE_KEY = 'story-studio-reminders-v1'
 const DEFAULT_CATEGORY_ID = 'category-character'
 const UNCATEGORIZED_ID = 'category-uncategorized'
 
@@ -61,7 +61,7 @@ const DEFAULT_CATEGORIES: ReminderCategory[] = [
   { id: 'category-style', name: '风格语气', color: '#a7d7d2' },
   { id: 'category-taboo', name: '禁忌事项', color: '#e6a6a6' },
   { id: 'category-temporary', name: '临时提醒', color: '#e2d39a' },
-  { id: UNCATEGORIZED_ID, name: '未分类', color: '#a1a1aa' },
+  { id: UNCATEGORIZED_ID, name: '未分类', color: '#a1a1aa' }
 ]
 
 let nextNoteNum = 1
@@ -97,15 +97,21 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function isTarget(value: unknown): value is ReminderTarget {
-  if (!isRecord(value) || value.type !== 'workbench' && value.type !== 'scene') return false
+  if (!isRecord(value) || (value.type !== 'workbench' && value.type !== 'scene')) return false
   if (value.type === 'workbench') return typeof value.workbench === 'string'
   if (value.scope === 'act') return typeof value.actId === 'string'
-  return value.scope === 'sequence' && typeof value.actId === 'string' && typeof value.seqId === 'string'
+  return (
+    value.scope === 'sequence' && typeof value.actId === 'string' && typeof value.seqId === 'string'
+  )
 }
 
 function normalizeCategory(value: unknown): ReminderCategory | null {
   if (!isRecord(value)) return null
-  if (typeof value.id !== 'string' || typeof value.name !== 'string' || typeof value.color !== 'string') {
+  if (
+    typeof value.id !== 'string' ||
+    typeof value.name !== 'string' ||
+    typeof value.color !== 'string'
+  ) {
     return null
   }
   return { id: value.id, name: value.name, color: value.color }
@@ -127,7 +133,7 @@ function normalizeVisual(value: unknown): ReminderVisualState | null {
     width: typeof value.width === 'number' ? value.width : 300,
     height: typeof value.height === 'number' ? value.height : 228,
     zIndex: value.zIndex,
-    collapsed: value.collapsed,
+    collapsed: value.collapsed
   }
 }
 
@@ -146,11 +152,13 @@ function normalizeNote(value: unknown, categories: ReminderCategory[]): Reminder
   }
 
   const categoryId =
-    typeof value.categoryId === 'string' && categories.some((category) => category.id === value.categoryId)
+    typeof value.categoryId === 'string' &&
+    categories.some((category) => category.id === value.categoryId)
       ? value.categoryId
       : UNCATEGORIZED_ID
 
-  const status: ReminderStatus = value.status === 'enabled' && targets.length > 0 ? 'enabled' : 'draft'
+  const status: ReminderStatus =
+    value.status === 'enabled' && targets.length > 0 ? 'enabled' : 'draft'
   const now = new Date().toISOString()
 
   return {
@@ -162,7 +170,7 @@ function normalizeNote(value: unknown, categories: ReminderCategory[]): Reminder
     targets,
     visuals,
     createdAt: typeof value.createdAt === 'string' ? value.createdAt : now,
-    updatedAt: typeof value.updatedAt === 'string' ? value.updatedAt : now,
+    updatedAt: typeof value.updatedAt === 'string' ? value.updatedAt : now
   }
 }
 
@@ -172,7 +180,9 @@ function normalizeStoredState(value: unknown): StoredReminderState {
   }
 
   const categories = Array.isArray(value.categories)
-    ? value.categories.map(normalizeCategory).filter((category): category is ReminderCategory => Boolean(category))
+    ? value.categories
+        .map(normalizeCategory)
+        .filter((category): category is ReminderCategory => Boolean(category))
     : []
 
   const categoryIds = new Set(categories.map((category) => category.id))
@@ -192,18 +202,14 @@ function normalizeStoredState(value: unknown): StoredReminderState {
   return { version: 1, categories, notes }
 }
 
-function loadFromStorage(): StoredReminderState {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return { version: 1, categories: cloneCategories(DEFAULT_CATEGORIES), notes: [] }
-    return normalizeStoredState(JSON.parse(raw))
-  } catch {
-    return { version: 1, categories: cloneCategories(DEFAULT_CATEGORIES), notes: [] }
-  }
+function createDefaultReminderState(): StoredReminderState {
+  return { version: 1, categories: cloneCategories(DEFAULT_CATEGORIES), notes: [] }
 }
 
-function saveToStorage(state: StoredReminderState): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
+function resetCounters(): void {
+  nextNoteNum = 1
+  nextCategoryNum = 1
+  nextZIndex = 900
 }
 
 function restoreCounters(state: StoredReminderState): void {
@@ -226,14 +232,26 @@ function nowIso(): string {
 }
 
 export const useReminderStore = defineStore('reminder', () => {
-  const stored = loadFromStorage()
+  const stored = createDefaultReminderState()
   restoreCounters(stored)
 
   const categories = ref<ReminderCategory[]>(stored.categories)
   const notes = ref<ReminderNote[]>(stored.notes)
 
+  function hydrateFromProject(data: unknown): void {
+    const state = normalizeStoredState(data)
+    resetCounters()
+    restoreCounters(state)
+    categories.value = state.categories
+    notes.value = state.notes
+  }
+
+  function toProjectData(): StoredReminderState {
+    return { version: 1, categories: categories.value, notes: notes.value }
+  }
+
   function save(): void {
-    saveToStorage({ version: 1, categories: categories.value, notes: notes.value })
+    useProjectStore().scheduleSave()
   }
 
   function getCategoryById(id: string): ReminderCategory | undefined {
@@ -251,14 +269,17 @@ export const useReminderStore = defineStore('reminder', () => {
       targets: [],
       visuals: {},
       createdAt: timestamp,
-      updatedAt: timestamp,
+      updatedAt: timestamp
     }
     notes.value.unshift(note)
     save()
     return note
   }
 
-  function updateNote(id: string, patch: Partial<Pick<ReminderNote, 'title' | 'content' | 'categoryId'>>): void {
+  function updateNote(
+    id: string,
+    patch: Partial<Pick<ReminderNote, 'title' | 'content' | 'categoryId'>>
+  ): void {
     const note = notes.value.find((candidate) => candidate.id === id)
     if (!note) return
     if (patch.title !== undefined) note.title = patch.title
@@ -305,7 +326,7 @@ export const useReminderStore = defineStore('reminder', () => {
     const category: ReminderCategory = {
       id: `category-custom-${nextCategoryNum++}`,
       name: name.trim() || '自定义分类',
-      color,
+      color
     }
     categories.value.push(category)
     save()
@@ -339,7 +360,7 @@ export const useReminderStore = defineStore('reminder', () => {
     return notes.value.filter(
       (note) =>
         note.status === 'enabled' &&
-        note.targets.some((target) => target.type === 'workbench' && target.workbench === workbench),
+        note.targets.some((target) => target.type === 'workbench' && target.workbench === workbench)
     )
   }
 
@@ -372,7 +393,7 @@ export const useReminderStore = defineStore('reminder', () => {
         target.type === 'scene' &&
         target.scope === 'sequence' &&
         Boolean(context.seqId) &&
-        target.seqId === context.seqId,
+        target.seqId === context.seqId
     )
     if (sequenceTarget?.type === 'scene' && sequenceTarget.scope === 'sequence') {
       return `scene:sequence:${sequenceTarget.seqId}`
@@ -393,7 +414,7 @@ export const useReminderStore = defineStore('reminder', () => {
         width: 300,
         height: 228,
         zIndex: nextZIndex++,
-        collapsed: false,
+        collapsed: false
       }
       save()
     }
@@ -416,7 +437,7 @@ export const useReminderStore = defineStore('reminder', () => {
     x: number,
     y: number,
     width: number,
-    height: number,
+    height: number
   ): void {
     const note = notes.value.find((candidate) => candidate.id === noteId)
     const visual = note?.visuals[visualKey]
@@ -452,6 +473,8 @@ export const useReminderStore = defineStore('reminder', () => {
     notes,
     enabledNotes,
     draftNotes,
+    hydrateFromProject,
+    toProjectData,
     getCategoryById,
     createNote,
     updateNote,
@@ -470,6 +493,6 @@ export const useReminderStore = defineStore('reminder', () => {
     moveVisual,
     resizeVisual,
     toggleCollapsed,
-    bringToFront,
+    bringToFront
   }
 })

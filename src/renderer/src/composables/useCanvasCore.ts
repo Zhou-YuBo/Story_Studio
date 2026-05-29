@@ -3,8 +3,8 @@ import type { BaseCard, CanvasEdge, DrawingItem, Canvas } from '../types/canvas'
 
 export interface CanvasCoreConfig {
   idPrefix: { card: string; edge: string; canvas: string }
-  storageKey: string
   minCardSize: { width: number; height: number }
+  onPersist?: () => void
 }
 
 export function useCanvasCore<TCard extends BaseCard>(config: CanvasCoreConfig) {
@@ -14,18 +14,8 @@ export function useCanvasCore<TCard extends BaseCard>(config: CanvasCoreConfig) 
 
   type TCanvas = Canvas<TCard>
 
-  function loadFromStorage(): TCanvas[] {
-    try {
-      const raw = localStorage.getItem(config.storageKey)
-      if (!raw) return []
-      return JSON.parse(raw)
-    } catch {
-      return []
-    }
-  }
-
-  function saveToStorage() {
-    localStorage.setItem(config.storageKey, JSON.stringify(canvases.value))
+  function persist() {
+    config.onPersist?.()
   }
 
   function restoreIdCounters(list: TCanvas[]) {
@@ -47,7 +37,7 @@ export function useCanvasCore<TCard extends BaseCard>(config: CanvasCoreConfig) 
   const cards = ref<TCard[]>([]) as Ref<TCard[]>
   const edges = ref<CanvasEdge[]>([])
   const drawings = ref<DrawingItem[]>([])
-  const canvases = ref<TCanvas[]>(loadFromStorage()) as Ref<TCanvas[]>
+  const canvases = ref<TCanvas[]>([]) as Ref<TCanvas[]>
   const activeCanvasId = ref<string | null>(null)
 
   // ---- 保存确认 ----
@@ -61,11 +51,28 @@ export function useCanvasCore<TCard extends BaseCard>(config: CanvasCoreConfig) 
   const drawingPreview = ref<DrawingItem | null>(null)
   const drawingConfig = ref({ color: '#a78bfa', lineWidth: 2 })
 
+  function hydrateCanvases(list: TCanvas[]) {
+    nextCardId = 1
+    nextEdgeId = 1
+    nextCanvasId = 1
+    canvases.value = JSON.parse(JSON.stringify(list))
+    restoreIdCounters(canvases.value)
+    newCanvas()
+  }
+
+  function toProjectCanvases(): TCanvas[] {
+    return JSON.parse(JSON.stringify(canvases.value))
+  }
+
   restoreIdCounters(canvases.value)
 
   // ---- ID 生成 ----
-  function genCardId(): string { return `${config.idPrefix.card}${nextCardId++}` }
-  function genEdgeId(): string { return `${config.idPrefix.edge}${nextEdgeId++}` }
+  function genCardId(): string {
+    return `${config.idPrefix.card}${nextCardId++}`
+  }
+  function genEdgeId(): string {
+    return `${config.idPrefix.edge}${nextEdgeId++}`
+  }
 
   // ---- 画布 CRUD ----
   function createCanvas(name: string): TCanvas {
@@ -75,10 +82,10 @@ export function useCanvasCore<TCard extends BaseCard>(config: CanvasCoreConfig) 
       cards: [],
       edges: [],
       drawings: [],
-      updatedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
     } as TCanvas
     canvases.value.push(canvas)
-    saveToStorage()
+    persist()
     return canvas
   }
 
@@ -103,13 +110,13 @@ export function useCanvasCore<TCard extends BaseCard>(config: CanvasCoreConfig) 
     canvas.edges = JSON.parse(JSON.stringify(edges.value))
     canvas.drawings = JSON.parse(JSON.stringify(drawings.value))
     canvas.updatedAt = new Date().toISOString()
-    saveToStorage()
+    persist()
     dirty.value = false
   }
 
   function deleteCanvas(id: string) {
     canvases.value = canvases.value.filter((c) => c.id !== id)
-    saveToStorage()
+    persist()
     if (activeCanvasId.value === id) {
       activeCanvasId.value = null
       cards.value = []
@@ -123,7 +130,7 @@ export function useCanvasCore<TCard extends BaseCard>(config: CanvasCoreConfig) 
     if (canvas) {
       canvas.name = name
       canvas.updatedAt = new Date().toISOString()
-      saveToStorage()
+      persist()
     }
   }
 
@@ -223,14 +230,36 @@ export function useCanvasCore<TCard extends BaseCard>(config: CanvasCoreConfig) 
   }
 
   return {
-    cards, edges, drawings,
-    canvases, activeCanvasId,
-    dirty, confirmDialog,
-    activeDrawingTool, isDrawing, drawingPreview, drawingConfig,
+    cards,
+    edges,
+    drawings,
+    canvases,
+    activeCanvasId,
+    dirty,
+    confirmDialog,
+    activeDrawingTool,
+    isDrawing,
+    drawingPreview,
+    drawingConfig,
     genCardId,
-    createCanvas, openCanvas, saveCurrentCanvas, deleteCanvas, renameCanvas, newCanvas,
-    pushCard, updateCardPosition, updateCardSize, updateCardRect, removeCard,
-    addEdge, removeEdge,
-    requestAction, confirmSave, confirmDiscard, confirmCancel,
+    hydrateCanvases,
+    toProjectCanvases,
+    createCanvas,
+    openCanvas,
+    saveCurrentCanvas,
+    deleteCanvas,
+    renameCanvas,
+    newCanvas,
+    pushCard,
+    updateCardPosition,
+    updateCardSize,
+    updateCardRect,
+    removeCard,
+    addEdge,
+    removeEdge,
+    requestAction,
+    confirmSave,
+    confirmDiscard,
+    confirmCancel
   }
 }

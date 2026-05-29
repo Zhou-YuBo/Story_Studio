@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
+import { useProjectStore } from './project'
 
 export interface RelationshipSelf {
   presentedSelf: string
@@ -36,7 +37,6 @@ export interface CharacterRelationship {
   changeNodes: RelationshipChangeNode[]
 }
 
-const RELATIONSHIPS_KEY = 'story-studio-character-relationships'
 let nextNodeId = 1
 
 function createDefaultRelationshipSelf(): RelationshipSelf {
@@ -49,7 +49,7 @@ function createDefaultRelationshipSelf(): RelationshipSelf {
     selfDeathView: '',
     preventsSelfDeath: '',
     expectedDeathCondition: '',
-    actualDeathCondition: '',
+    actualDeathCondition: ''
   }
 }
 
@@ -58,17 +58,20 @@ function createDefaultDefinitions(): RelationshipDefinitions {
     surface: '',
     actual: '',
     social: '',
-    symbolic: '',
+    symbolic: ''
   }
 }
 
-function createDefaultChangeNode(structurePosition: string, timelinePosition: number): RelationshipChangeNode {
+function createDefaultChangeNode(
+  structurePosition: string,
+  timelinePosition: number
+): RelationshipChangeNode {
   return {
     id: `relationship-node-${nextNodeId++}`,
     structurePosition,
     timelinePosition,
     closeness: 50,
-    turningPoint: '',
+    turningPoint: ''
   }
 }
 
@@ -87,7 +90,7 @@ function normalizeRelationship(relationship: CharacterRelationship): CharacterRe
   for (const characterId of characterIds) {
     selves[characterId] = {
       ...createDefaultRelationshipSelf(),
-      ...(relationship.selves?.[characterId] ?? {}),
+      ...(relationship.selves?.[characterId] ?? {})
     }
   }
 
@@ -98,7 +101,7 @@ function normalizeRelationship(relationship: CharacterRelationship): CharacterRe
     selves,
     definitions: {
       ...createDefaultDefinitions(),
-      ...(relationship.definitions ?? {}),
+      ...(relationship.definitions ?? {})
     },
     changeNodes: Array.isArray(relationship.changeNodes)
       ? relationship.changeNodes
@@ -110,29 +113,22 @@ function normalizeRelationship(relationship: CharacterRelationship): CharacterRe
                 ? node.timelinePosition
                 : getDefaultTimelinePosition(index, relationship.changeNodes.length),
             closeness: typeof node.closeness === 'number' ? node.closeness : 50,
-            turningPoint: node.turningPoint ?? '',
+            turningPoint: node.turningPoint ?? ''
           }))
           .sort((nodeA, nodeB) => nodeA.timelinePosition - nodeB.timelinePosition)
-      : [],
+      : []
   }
 }
 
-function loadRelationshipsFromStorage(): CharacterRelationship[] {
-  try {
-    const raw = localStorage.getItem(RELATIONSHIPS_KEY)
-    if (!raw) return []
-    const parsed = JSON.parse(raw)
-    if (!Array.isArray(parsed)) return []
-    return parsed.map(normalizeRelationship)
-  } catch {
-    return []
-  }
+function normalizeRelationshipProjectData(data: unknown): CharacterRelationship[] {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return []
+  const relationships = (data as { relationships?: unknown }).relationships
+  if (!Array.isArray(relationships)) return []
+  return (relationships as CharacterRelationship[]).map(normalizeRelationship)
 }
 
-function saveRelationshipsToStorage(relationships: CharacterRelationship[]) {
-  try {
-    localStorage.setItem(RELATIONSHIPS_KEY, JSON.stringify(relationships))
-  } catch {}
+function resetNodeCounter(): void {
+  nextNodeId = 1
 }
 
 function restoreNodeCounter(relationships: CharacterRelationship[]) {
@@ -145,21 +141,38 @@ function restoreNodeCounter(relationships: CharacterRelationship[]) {
 }
 
 export const useCharacterRelationshipStore = defineStore('characterRelationship', () => {
-  const relationships = ref<CharacterRelationship[]>(loadRelationshipsFromStorage())
+  const relationships = ref<CharacterRelationship[]>([])
 
-  restoreNodeCounter(relationships.value)
-
-  function saveRelationships() {
-    saveRelationshipsToStorage(relationships.value)
+  function hydrateFromProject(data: unknown): void {
+    const nextRelationships = normalizeRelationshipProjectData(data)
+    resetNodeCounter()
+    restoreNodeCounter(nextRelationships)
+    relationships.value = nextRelationships
   }
 
-  function getRelationship(characterAId: string, characterBId: string): CharacterRelationship | undefined {
+  function toProjectData() {
+    return {
+      relationships: relationships.value
+    }
+  }
+
+  function saveRelationships() {
+    useProjectStore().scheduleSave()
+  }
+
+  function getRelationship(
+    characterAId: string,
+    characterBId: string
+  ): CharacterRelationship | undefined {
     if (!characterAId || !characterBId || characterAId === characterBId) return undefined
     const relationshipId = createRelationshipId(characterAId, characterBId)
     return relationships.value.find((relationship) => relationship.id === relationshipId)
   }
 
-  function ensureRelationship(characterAId: string, characterBId: string): CharacterRelationship | undefined {
+  function ensureRelationship(
+    characterAId: string,
+    characterBId: string
+  ): CharacterRelationship | undefined {
     if (!characterAId || !characterBId || characterAId === characterBId) return undefined
 
     const existingRelationship = getRelationship(characterAId, characterBId)
@@ -171,10 +184,10 @@ export const useCharacterRelationshipStore = defineStore('characterRelationship'
       characterIds,
       selves: {
         [characterIds[0]]: createDefaultRelationshipSelf(),
-        [characterIds[1]]: createDefaultRelationshipSelf(),
+        [characterIds[1]]: createDefaultRelationshipSelf()
       },
       definitions: createDefaultDefinitions(),
-      changeNodes: [createDefaultChangeNode('剧情开始', 8), createDefaultChangeNode('剧情结束', 92)],
+      changeNodes: [createDefaultChangeNode('剧情开始', 8), createDefaultChangeNode('剧情结束', 92)]
     }
 
     relationships.value.push(relationship)
@@ -182,7 +195,10 @@ export const useCharacterRelationshipStore = defineStore('characterRelationship'
     return relationship
   }
 
-  function addChangeNode(relationshipId: string, afterNodeId?: string): RelationshipChangeNode | undefined {
+  function addChangeNode(
+    relationshipId: string,
+    afterNodeId?: string
+  ): RelationshipChangeNode | undefined {
     const relationship = relationships.value.find((item) => item.id === relationshipId)
     if (!relationship) return undefined
 
@@ -213,9 +229,11 @@ export const useCharacterRelationshipStore = defineStore('characterRelationship'
   return {
     relationships,
     saveRelationships,
+    hydrateFromProject,
+    toProjectData,
     getRelationship,
     ensureRelationship,
     addChangeNode,
-    removeChangeNode,
+    removeChangeNode
   }
 })
