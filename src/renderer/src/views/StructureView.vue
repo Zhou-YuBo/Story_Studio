@@ -4,6 +4,8 @@ import ValueCurvePanel from '../components/structure/ValueCurvePanel.vue'
 import {
   PROJECT_OWNER_ID,
   type ActCoreTextField,
+  type SceneCoreTextField,
+  type SequenceCoreTextField,
   type StoryCoreFields,
   type StructureOwnerType,
   useStructureStore,
@@ -15,6 +17,7 @@ type SelectedNode =
   | { type: 'project' }
   | { type: 'act'; actId: string }
   | { type: 'sequence'; actId: string; seqId: string }
+  | { type: 'scene'; actId: string; seqId: string; sceneId: string }
 
 const store = useStructureStore()
 const selectedNode = ref<SelectedNode>({ type: 'project' })
@@ -33,26 +36,35 @@ const selectedAct = computed(() => {
 
 const selectedSequence = computed(() => {
   const node = selectedNode.value
-  if (node.type !== 'sequence') return undefined
+  if (node.type !== 'sequence' && node.type !== 'scene') return undefined
   return selectedAct.value?.sequences.find((seq) => seq.id === node.seqId)
+})
+
+const selectedScene = computed(() => {
+  const node = selectedNode.value
+  if (node.type !== 'scene') return undefined
+  return selectedSequence.value?.scenes.find((scene) => scene.id === node.sceneId)
 })
 
 const selectedTitle = computed(() => {
   if (selectedNode.value.type === 'project') return PROJECT_TITLE
   if (selectedNode.value.type === 'act') return selectedAct.value?.label ?? '未选择幕'
-  return selectedSequence.value?.label ?? '未选择序列'
+  if (selectedNode.value.type === 'sequence') return selectedSequence.value?.label ?? '未选择序列'
+  return selectedScene.value?.label ?? '未选择场景'
 })
 
 const selectedKindLabel = computed(() => {
   if (selectedNode.value.type === 'project') return '项目'
   if (selectedNode.value.type === 'act') return '幕'
-  return '序列'
+  if (selectedNode.value.type === 'sequence') return '序列'
+  return '场景'
 })
 
 const horizontalUnitLabel = computed(() => {
   if (selectedNode.value.type === 'project') return '幕'
   if (selectedNode.value.type === 'act') return '序列'
-  return '场景'
+  if (selectedNode.value.type === 'sequence') return '场景'
+  return '节拍'
 })
 
 const selectedOwnerType = computed<StructureOwnerType>(() => selectedNode.value.type)
@@ -60,7 +72,8 @@ const selectedOwnerType = computed<StructureOwnerType>(() => selectedNode.value.
 const selectedOwnerId = computed(() => {
   if (selectedNode.value.type === 'project') return PROJECT_OWNER_ID
   if (selectedNode.value.type === 'act') return selectedNode.value.actId
-  return selectedNode.value.seqId
+  if (selectedNode.value.type === 'sequence') return selectedNode.value.seqId
+  return selectedNode.value.sceneId
 })
 
 const curveTargets = computed(() => {
@@ -77,6 +90,22 @@ const curveTargets = computed(() => {
       id: seq.id,
       type: 'sequence' as StructureOwnerType,
       label: seq.label,
+    }))
+  }
+
+  if (selectedNode.value.type === 'sequence') {
+    return (selectedSequence.value?.scenes ?? []).map((scene) => ({
+      id: scene.id,
+      type: 'scene' as StructureOwnerType,
+      label: scene.label,
+    }))
+  }
+
+  if (selectedNode.value.type === 'scene') {
+    return (selectedScene.value?.beats ?? []).map((beat) => ({
+      id: beat.id,
+      type: 'scene' as StructureOwnerType,
+      label: beat.label,
     }))
   }
 
@@ -115,6 +144,17 @@ function isSequenceSelected(seqId: string) {
   return selectedNode.value.type === 'sequence' && selectedNode.value.seqId === seqId
 }
 
+function isSceneSelected(sceneId: string) {
+  return selectedNode.value.type === 'scene' && selectedNode.value.sceneId === sceneId
+}
+
+function isSequenceScenesOpen(seqId: string) {
+  return (
+    (selectedNode.value.type === 'sequence' || selectedNode.value.type === 'scene') &&
+    selectedNode.value.seqId === seqId
+  )
+}
+
 function selectProject() {
   selectedNode.value = { type: 'project' }
 }
@@ -125,6 +165,10 @@ function selectAct(actId: string) {
 
 function selectSequence(actId: string, seqId: string) {
   selectedNode.value = { type: 'sequence', actId, seqId }
+}
+
+function selectScene(actId: string, seqId: string, sceneId: string) {
+  selectedNode.value = { type: 'scene', actId, seqId, sceneId }
 }
 
 function addActAndSelect() {
@@ -151,8 +195,26 @@ function removeActAndRepairSelection(actId: string) {
 function removeSequenceAndRepairSelection(actId: string, seqId: string) {
   store.removeSequence(actId, seqId)
 
-  if (selectedNode.value.type === 'sequence' && selectedNode.value.seqId === seqId) {
+  if (
+    (selectedNode.value.type === 'sequence' || selectedNode.value.type === 'scene') &&
+    selectedNode.value.seqId === seqId
+  ) {
     selectAct(actId)
+  }
+}
+
+function addSceneAndSelect(actId: string, seqId: string) {
+  const scene = store.addScene(actId, seqId)
+  if (!scene) return
+  selectScene(actId, seqId, scene.id)
+  startSceneLabelEdit(scene.id, scene.label)
+}
+
+function removeSceneAndRepairSelection(actId: string, seqId: string, sceneId: string) {
+  store.removeScene(actId, seqId, sceneId)
+
+  if (selectedNode.value.type === 'scene' && selectedNode.value.sceneId === sceneId) {
+    selectSequence(actId, seqId)
   }
 }
 
@@ -160,11 +222,11 @@ function onActColorChange(actId: string, e: Event) {
   store.updateActColor(actId, (e.target as HTMLInputElement).value)
 }
 
-function labelEditKey(type: 'act' | 'sequence', id: string) {
+function labelEditKey(type: 'act' | 'sequence' | 'scene', id: string) {
   return `${type}:${id}`
 }
 
-function isEditingLabel(type: 'act' | 'sequence', id: string) {
+function isEditingLabel(type: 'act' | 'sequence' | 'scene', id: string) {
   return editingLabelKey.value === labelEditKey(type, id)
 }
 
@@ -175,6 +237,11 @@ function startActLabelEdit(actId: string, label: string) {
 
 function startSequenceLabelEdit(seqId: string, label: string) {
   editingLabelKey.value = labelEditKey('sequence', seqId)
+  editingLabelDraft.value = label
+}
+
+function startSceneLabelEdit(sceneId: string, label: string) {
+  editingLabelKey.value = labelEditKey('scene', sceneId)
   editingLabelDraft.value = label
 }
 
@@ -192,6 +259,15 @@ function commitLabelEdit() {
     const act = store.acts.find((item) => item.sequences.some((seq) => seq.id === id))
     const seq = act?.sequences.find((item) => item.id === id)
     if (act && seq) store.updateSequenceLabel(act.id, id, label || seq.label || '未命名序列')
+  }
+
+  if (type === 'scene') {
+    const act = store.acts.find((item) =>
+      item.sequences.some((seq) => seq.scenes.some((scene) => scene.id === id)),
+    )
+    const seq = act?.sequences.find((item) => item.scenes.some((scene) => scene.id === id))
+    const scene = seq?.scenes.find((item) => item.id === id)
+    if (act && seq && scene) store.updateSceneLabel(act.id, seq.id, id, label || scene.label || '未命名场景')
   }
 
   editingLabelKey.value = ''
@@ -234,6 +310,50 @@ function updateActCoreField(field: ActCoreTextField, e: Event) {
     selectedNode.value.actId,
     field,
     (e.target as HTMLTextAreaElement | HTMLInputElement).value,
+  )
+}
+
+function updateSequenceCoreField(field: SequenceCoreTextField, e: Event) {
+  if (selectedNode.value.type !== 'sequence' && selectedNode.value.type !== 'scene') return
+  store.updateSequenceCoreField(
+    selectedNode.value.actId,
+    selectedNode.value.seqId,
+    field,
+    (e.target as HTMLTextAreaElement | HTMLInputElement).value,
+  )
+}
+
+function updateSceneCoreField(sceneId: string, field: SceneCoreTextField, e: Event) {
+  if (!selectedSequence.value) return
+  const node = selectedNode.value
+  if (node.type !== 'sequence' && node.type !== 'scene') return
+  store.updateSceneCoreField(
+    node.actId,
+    node.seqId,
+    sceneId,
+    field,
+    (e.target as HTMLTextAreaElement | HTMLInputElement).value,
+  )
+}
+
+function addBeatToSelectedScene() {
+  if (selectedNode.value.type !== 'scene') return
+  store.addBeat(selectedNode.value.actId, selectedNode.value.seqId, selectedNode.value.sceneId)
+}
+
+function removeBeatFromSelectedScene(beatId: string) {
+  if (selectedNode.value.type !== 'scene') return
+  store.removeBeat(selectedNode.value.actId, selectedNode.value.seqId, selectedNode.value.sceneId, beatId)
+}
+
+function updateBeatSummary(beatId: string, e: Event) {
+  if (selectedNode.value.type !== 'scene') return
+  store.updateBeatSummary(
+    selectedNode.value.actId,
+    selectedNode.value.seqId,
+    selectedNode.value.sceneId,
+    beatId,
+    (e.target as HTMLInputElement).value,
   )
 }
 
@@ -332,46 +452,88 @@ function addNewCoreAxis() {
           </div>
 
           <div class="sequence-list">
-            <div
-              v-for="seq in act.sequences"
-              :key="seq.id"
-              class="tree-row sequence-row"
-              :class="{ selected: isSequenceSelected(seq.id) }"
-              @click="selectSequence(act.id, seq.id)"
-            >
-              <input
-                type="color"
-                :value="seq.color"
-                class="color-picker color-picker-sm"
-                @click.stop
-                @input="onSeqColorChange(act.id, seq.id, $event)"
-              />
-              <input
-                v-if="isEditingLabel('sequence', seq.id)"
-                v-model="editingLabelDraft"
-                type="text"
-                class="label-input seq-label-input"
-                autofocus
-                @click.stop
-                @blur="commitLabelEdit"
-                @keydown="onLabelEditKeydown"
-              />
-              <span
-                v-else
-                class="tree-label editable-label seq-text-label"
-                title="双击修改标题"
-                @dblclick.stop="startSequenceLabelEdit(seq.id, seq.label)"
+            <div v-for="seq in act.sequences" :key="seq.id" class="sequence-branch">
+              <div
+                class="tree-row sequence-row"
+                :class="{ selected: isSequenceSelected(seq.id) }"
+                @click="selectSequence(act.id, seq.id)"
               >
-                {{ seq.label }}
-              </span>
-              <button
-                class="remove-btn remove-btn-sm"
-                type="button"
-                title="删除序列"
-                @click.stop="removeSequenceAndRepairSelection(act.id, seq.id)"
-              >
-                ×
-              </button>
+                <input
+                  type="color"
+                  :value="seq.color"
+                  class="color-picker color-picker-sm"
+                  @click.stop
+                  @input="onSeqColorChange(act.id, seq.id, $event)"
+                />
+                <input
+                  v-if="isEditingLabel('sequence', seq.id)"
+                  v-model="editingLabelDraft"
+                  type="text"
+                  class="label-input seq-label-input"
+                  autofocus
+                  @click.stop
+                  @blur="commitLabelEdit"
+                  @keydown="onLabelEditKeydown"
+                />
+                <span
+                  v-else
+                  class="tree-label editable-label seq-text-label"
+                  title="双击修改标题"
+                  @dblclick.stop="startSequenceLabelEdit(seq.id, seq.label)"
+                >
+                  {{ seq.label }}
+                </span>
+                <button
+                  class="remove-btn remove-btn-sm"
+                  type="button"
+                  title="删除序列"
+                  @click.stop="removeSequenceAndRepairSelection(act.id, seq.id)"
+                >
+                  ×
+                </button>
+              </div>
+
+              <div v-if="isSequenceScenesOpen(seq.id)" class="scene-list">
+                <div
+                  v-for="scene in seq.scenes"
+                  :key="scene.id"
+                  class="tree-row scene-row"
+                  :class="{ selected: isSceneSelected(scene.id) }"
+                  @click="selectScene(act.id, seq.id, scene.id)"
+                >
+                  <span class="scene-mark" />
+                  <input
+                    v-if="isEditingLabel('scene', scene.id)"
+                    v-model="editingLabelDraft"
+                    type="text"
+                    class="label-input scene-label-input"
+                    autofocus
+                    @click.stop
+                    @blur="commitLabelEdit"
+                    @keydown="onLabelEditKeydown"
+                  />
+                  <span
+                    v-else
+                    class="tree-label editable-label scene-text-label"
+                    title="双击修改标题"
+                    @dblclick.stop="startSceneLabelEdit(scene.id, scene.label)"
+                  >
+                    {{ scene.label }}
+                  </span>
+                  <button
+                    class="remove-btn remove-btn-sm"
+                    type="button"
+                    title="删除场景"
+                    @click.stop="removeSceneAndRepairSelection(act.id, seq.id, scene.id)"
+                  >
+                    ×
+                  </button>
+                </div>
+
+                <button class="add-scene-btn" type="button" @click="addSceneAndSelect(act.id, seq.id)">
+                  + 场景
+                </button>
+              </div>
             </div>
 
             <button class="add-seq-btn" type="button" @click="addSequenceAndSelect(act.id)">
@@ -560,6 +722,193 @@ function addNewCoreAxis() {
           </div>
         </div>
 
+        <div
+          v-else-if="selectedNode.type === 'scene' && selectedScene"
+          class="sequence-core-panel"
+        >
+          <div class="sequence-top-grid">
+            <div class="sequence-structure-fields">
+              <div class="story-line">
+                <span>开始状态：</span>
+                <input class="story-inline-input" type="text" />
+              </div>
+
+              <div class="story-line">
+                <span>转折处：</span>
+                <input class="story-inline-input" type="text" />
+              </div>
+
+              <div class="story-line">
+                <span>结束状态：</span>
+                <input class="story-inline-input" type="text" />
+              </div>
+
+              <div class="story-line">
+                <span>如果</span>
+                <input class="story-inline-input" type="text" />
+                <span>，就全剧终。</span>
+              </div>
+            </div>
+
+            <div class="sequence-scene-panel">
+              <div class="sequence-scene-head">
+                <span>节拍</span>
+                <button class="inline-add-btn" type="button" @click="addBeatToSelectedScene">
+                  + 节拍
+                </button>
+              </div>
+
+              <div class="sequence-scene-list">
+                <div
+                  v-for="beat in selectedScene.beats"
+                  :key="beat.id"
+                  class="sequence-scene-row"
+                >
+                  <span class="sequence-scene-name">{{ beat.label }}</span>
+                  <input
+                    :value="beat.summary"
+                    class="scene-summary-input"
+                    type="text"
+                    placeholder="一句话梗概"
+                    @input="updateBeatSummary(beat.id, $event)"
+                  />
+                  <button
+                    class="scene-inline-remove"
+                    type="button"
+                    title="删除节拍"
+                    @click="removeBeatFromSelectedScene(beat.id)"
+                  >
+                    ×
+                  </button>
+                </div>
+
+                <button
+                  v-if="selectedScene.beats.length === 0"
+                  class="empty-scene-add-btn"
+                  type="button"
+                  @click="addBeatToSelectedScene"
+                >
+                  + 添加节拍
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <label class="act-synopsis-field sequence-synopsis-field">
+            <span>剧情梗概：</span>
+            <textarea
+              :value="selectedScene.core.summary"
+              rows="5"
+              @input="updateSceneCoreField(selectedScene.id, 'summary', $event)"
+            />
+          </label>
+        </div>
+
+        <div
+          v-else-if="selectedNode.type === 'sequence' && selectedSequence"
+          class="sequence-core-panel"
+        >
+          <div class="sequence-top-grid">
+            <div class="sequence-structure-fields">
+              <div class="story-line">
+                <span>开始状态：</span>
+                <input
+                  :value="selectedSequence.core.startState"
+                  class="story-inline-input"
+                  type="text"
+                  @input="updateSequenceCoreField('startState', $event)"
+                />
+              </div>
+
+              <div class="story-line">
+                <span>转折处：</span>
+                <input
+                  :value="selectedSequence.core.turningPoint"
+                  class="story-inline-input"
+                  type="text"
+                  @input="updateSequenceCoreField('turningPoint', $event)"
+                />
+              </div>
+
+              <div class="story-line">
+                <span>结束状态：</span>
+                <input
+                  :value="selectedSequence.core.endState"
+                  class="story-inline-input"
+                  type="text"
+                  @input="updateSequenceCoreField('endState', $event)"
+                />
+              </div>
+
+              <div class="story-line">
+                <span>如果</span>
+                <input
+                  :value="selectedSequence.core.endingTest"
+                  class="story-inline-input"
+                  type="text"
+                  @input="updateSequenceCoreField('endingTest', $event)"
+                />
+                <span>，就全剧终。</span>
+              </div>
+            </div>
+
+            <div class="sequence-scene-panel">
+              <div class="sequence-scene-head">
+                <span>场景</span>
+                <button class="inline-add-btn" type="button" @click="addSceneAndSelect(selectedNode.actId, selectedNode.seqId)">
+                  + 场景
+                </button>
+              </div>
+
+              <div class="sequence-scene-list">
+                <div
+                  v-for="scene in selectedSequence.scenes"
+                  :key="scene.id"
+                  class="sequence-scene-row"
+                  :class="{ selected: isSceneSelected(scene.id) }"
+                  @click="selectScene(selectedNode.actId, selectedNode.seqId, scene.id)"
+                >
+                  <span class="sequence-scene-name">{{ scene.label }}</span>
+                  <input
+                    :value="scene.core.summary"
+                    class="scene-summary-input"
+                    type="text"
+                    placeholder="一句话梗概"
+                    @click.stop
+                    @input="updateSceneCoreField(scene.id, 'summary', $event)"
+                  />
+                  <button
+                    class="scene-inline-remove"
+                    type="button"
+                    title="删除场景"
+                    @click.stop="removeSceneAndRepairSelection(selectedNode.actId, selectedNode.seqId, scene.id)"
+                  >
+                    ×
+                  </button>
+                </div>
+
+                <button
+                  v-if="selectedSequence.scenes.length === 0"
+                  class="empty-scene-add-btn"
+                  type="button"
+                  @click="addSceneAndSelect(selectedNode.actId, selectedNode.seqId)"
+                >
+                  + 添加场景
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <label class="act-synopsis-field sequence-synopsis-field">
+            <span>剧情梗概：</span>
+            <textarea
+              :value="selectedSequence.core.synopsis"
+              rows="5"
+              @input="updateSequenceCoreField('synopsis', $event)"
+            />
+          </label>
+        </div>
+
         <div v-else-if="selectedNode.type === 'act' && selectedAct" class="act-core-panel">
           <div class="story-line">
             <span>本幕最高任务：</span>
@@ -673,7 +1022,8 @@ h2 {
 }
 
 .primary-add-btn,
-.add-seq-btn {
+.add-seq-btn,
+.add-scene-btn {
   border: 1px solid #3f3f46;
   border-radius: 6px;
   background: transparent;
@@ -688,7 +1038,8 @@ h2 {
 }
 
 .primary-add-btn:hover,
-.add-seq-btn:hover {
+.add-seq-btn:hover,
+.add-scene-btn:hover {
   background: #27272a;
   color: #e4e4e7;
   border-color: #52525b;
@@ -770,7 +1121,8 @@ button.tree-row {
   font-weight: 600;
 }
 
-.seq-text-label {
+.seq-text-label,
+.scene-text-label {
   padding: 3px 6px;
   font-size: 13px;
 }
@@ -789,16 +1141,48 @@ button.tree-row {
 }
 
 .act-row,
-.sequence-row {
+.sequence-row,
+.scene-row {
   padding: 2px 4px;
   cursor: pointer;
 }
 
-.sequence-list {
-  margin-left: 24px;
+.sequence-list,
+.scene-list {
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+
+.sequence-list {
+  margin-left: 24px;
+}
+
+.sequence-branch {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.scene-list {
+  margin-left: 24px;
+}
+
+.scene-row {
+  min-height: 26px;
+  color: #8b8b95;
+}
+
+.scene-mark {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: #71717a;
+  flex-shrink: 0;
+}
+
+.scene-row.selected .scene-mark {
+  background: #a78bfa;
 }
 
 .color-picker {
@@ -839,7 +1223,8 @@ button.tree-row {
   font-weight: 600;
 }
 
-.seq-label-input {
+.seq-label-input,
+.scene-label-input {
   padding: 3px 6px;
   font-size: 13px;
 }
@@ -871,13 +1256,19 @@ button.tree-row {
   font-size: 13px;
 }
 
-.add-seq-btn {
+.add-seq-btn,
+.add-scene-btn {
   align-self: flex-start;
   margin: 2px 0 4px;
   padding: 3px 10px;
   color: #71717a;
   font-size: 12px;
   border-style: dashed;
+}
+
+.add-scene-btn {
+  padding: 2px 9px;
+  font-size: 11px;
 }
 
 .structure-main {
@@ -902,7 +1293,8 @@ button.tree-row {
 }
 
 .story-core-panel,
-.act-core-panel {
+.act-core-panel,
+.sequence-core-panel {
   min-height: 100%;
   display: flex;
   flex-direction: column;
@@ -911,7 +1303,8 @@ button.tree-row {
   padding: 12px 18px;
 }
 
-.act-core-panel {
+.act-core-panel,
+.sequence-core-panel {
   justify-content: flex-start;
 }
 
@@ -1149,6 +1542,130 @@ button.tree-row {
   flex-direction: column;
   gap: 8px;
   margin-top: 8px;
+}
+
+.sequence-top-grid {
+  height: 132px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 0.9fr);
+  align-items: stretch;
+  gap: 16px;
+  overflow: hidden;
+}
+
+.sequence-structure-fields {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 6px;
+  overflow: hidden;
+}
+
+.sequence-scene-panel {
+  min-width: 0;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #27272a;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.025);
+  padding: 8px 10px;
+  overflow: hidden;
+}
+
+.sequence-scene-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+  color: #d4d4d8;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.inline-add-btn,
+.empty-scene-add-btn,
+.scene-inline-remove {
+  border: 1px solid #3f3f46;
+  border-radius: 6px;
+  background: transparent;
+  color: #a1a1aa;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.inline-add-btn {
+  padding: 2px 8px;
+}
+
+.sequence-scene-list {
+  min-height: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.sequence-scene-row {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(64px, auto) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  padding: 2px 5px;
+}
+
+.sequence-scene-row:hover,
+.sequence-scene-row.selected {
+  border-color: rgba(167, 139, 250, 0.34);
+  background: rgba(167, 139, 250, 0.08);
+}
+
+.sequence-scene-name {
+  overflow: hidden;
+  color: #a1a1aa;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scene-summary-input {
+  min-width: 0;
+  border: none;
+  border-bottom: 1px solid #3f3f46;
+  background: transparent;
+  color: #e4e4e7;
+  outline: none;
+  padding: 2px 4px;
+  font-size: 12px;
+}
+
+.scene-summary-input:focus {
+  border-bottom-color: #a78bfa;
+}
+
+.scene-inline-remove {
+  width: 22px;
+  height: 22px;
+  border: none;
+  color: #71717a;
+}
+
+.scene-inline-remove:hover {
+  color: #ef4444;
+}
+
+.empty-scene-add-btn {
+  align-self: flex-start;
+  border-style: dashed;
+  padding: 4px 10px;
 }
 
 .act-synopsis-field {

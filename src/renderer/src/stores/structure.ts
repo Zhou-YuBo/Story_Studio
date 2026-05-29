@@ -27,10 +27,41 @@ export interface ActCoreFields {
 
 export type ActCoreTextField = keyof ActCoreFields
 
+export interface SequenceCoreFields {
+  startState: string
+  turningPoint: string
+  endState: string
+  endingTest: string
+  synopsis: string
+}
+
+export type SequenceCoreTextField = keyof SequenceCoreFields
+
+export interface SceneCoreFields {
+  summary: string
+}
+
+export type SceneCoreTextField = keyof SceneCoreFields
+
+export interface StructureBeat {
+  id: string
+  label: string
+  summary: string
+}
+
+export interface StructureScene {
+  id: string
+  label: string
+  core: SceneCoreFields
+  beats: StructureBeat[]
+}
+
 export interface StructureSequence {
   id: string
   label: string
   color: string
+  scenes: StructureScene[]
+  core: SequenceCoreFields
 }
 
 export interface StructureAct {
@@ -94,6 +125,8 @@ const PROJECT_OWNER_ID = 'current-project'
 
 let nextActNum = 1
 let nextSeqNum = 1
+let nextSceneNum = 1
+let nextBeatNum = 1
 let nextAxisNum = 1
 
 function createEmptyStoryCore(): StoryCoreFields {
@@ -117,6 +150,22 @@ function createEmptyActCore(): ActCoreFields {
     endState: '',
     endingTest: '',
     synopsis: '',
+  }
+}
+
+function createEmptySequenceCore(): SequenceCoreFields {
+  return {
+    startState: '',
+    turningPoint: '',
+    endState: '',
+    endingTest: '',
+    synopsis: '',
+  }
+}
+
+function createEmptySceneCore(): SceneCoreFields {
+  return {
+    summary: '',
   }
 }
 
@@ -166,6 +215,72 @@ function normalizeActCore(value: unknown): ActCoreFields {
   }
 }
 
+function normalizeSequenceCore(value: unknown): SequenceCoreFields {
+  const empty = createEmptySequenceCore()
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return empty
+
+  const core = value as Partial<SequenceCoreFields>
+  return {
+    startState: typeof core.startState === 'string' ? core.startState : '',
+    turningPoint: typeof core.turningPoint === 'string' ? core.turningPoint : '',
+    endState: typeof core.endState === 'string' ? core.endState : '',
+    endingTest: typeof core.endingTest === 'string' ? core.endingTest : '',
+    synopsis: typeof core.synopsis === 'string' ? core.synopsis : '',
+  }
+}
+
+function normalizeSceneCore(value: unknown): SceneCoreFields {
+  const empty = createEmptySceneCore()
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return empty
+
+  const core = value as Partial<SceneCoreFields>
+  return {
+    summary: typeof core.summary === 'string' ? core.summary : '',
+  }
+}
+
+function normalizeBeat(value: unknown): StructureBeat | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+
+  const beat = value as Partial<StructureBeat>
+  if (typeof beat.id !== 'string' || typeof beat.label !== 'string') return null
+
+  return {
+    id: beat.id,
+    label: beat.label,
+    summary: typeof beat.summary === 'string' ? beat.summary : '',
+  }
+}
+
+function normalizeScene(value: unknown): StructureScene | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+
+  const scene = value as Partial<StructureScene>
+  if (typeof scene.id !== 'string' || typeof scene.label !== 'string') return null
+
+  return {
+    id: scene.id,
+    label: scene.label,
+    core: normalizeSceneCore(scene.core),
+    beats: Array.isArray(scene.beats) ? scene.beats.map(normalizeBeat).filter((beat) => beat !== null) : [],
+  }
+}
+
+function normalizeSequence(value: unknown): StructureSequence | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+
+  const seq = value as Partial<StructureSequence>
+  if (typeof seq.id !== 'string' || typeof seq.label !== 'string') return null
+
+  return {
+    id: seq.id,
+    label: seq.label,
+    color: typeof seq.color === 'string' ? seq.color : MORANDY_COLORS[0],
+    scenes: Array.isArray(seq.scenes) ? seq.scenes.map(normalizeScene).filter((scene) => scene !== null) : [],
+    core: normalizeSequenceCore(seq.core),
+  }
+}
+
 function normalizeAct(value: unknown): StructureAct | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
 
@@ -176,7 +291,7 @@ function normalizeAct(value: unknown): StructureAct | null {
     id: act.id,
     label: act.label,
     color: typeof act.color === 'string' ? act.color : MORANDY_COLORS[0],
-    sequences: Array.isArray(act.sequences) ? act.sequences : [],
+    sequences: Array.isArray(act.sequences) ? act.sequences.map(normalizeSequence).filter((seq) => seq !== null) : [],
     core: normalizeActCore(act.core),
   }
 }
@@ -227,6 +342,14 @@ function restoreIdCounters(acts: StructureAct[], axes: ValueAxis[]) {
     for (const s of a.sequences) {
       const sn = parseInt(s.id.replace('seq-', ''))
       if (!isNaN(sn)) nextSeqNum = Math.max(nextSeqNum, sn + 1)
+      for (const scene of s.scenes) {
+        const sceneNum = parseInt(scene.id.replace('scene-', ''))
+        if (!isNaN(sceneNum)) nextSceneNum = Math.max(nextSceneNum, sceneNum + 1)
+        for (const beat of scene.beats) {
+          const beatNum = parseInt(beat.id.replace('beat-', ''))
+          if (!isNaN(beatNum)) nextBeatNum = Math.max(nextBeatNum, beatNum + 1)
+        }
+      }
     }
   }
 
@@ -309,6 +432,8 @@ export const useStructureStore = defineStore('structure', () => {
           id: `seq-${nextSeqNum++}`,
           label: '序列 1',
           color: MORANDY_COLORS[(idx + 1) % MORANDY_COLORS.length],
+          scenes: [],
+          core: createEmptySequenceCore(),
         },
       ],
       core: createEmptyActCore(),
@@ -335,6 +460,8 @@ export const useStructureStore = defineStore('structure', () => {
       id: `seq-${nextSeqNum++}`,
       label: `序列 ${idx + 1}`,
       color: MORANDY_COLORS[idx % MORANDY_COLORS.length],
+      scenes: [],
+      core: createEmptySequenceCore(),
     })
     save()
   }
@@ -342,9 +469,89 @@ export const useStructureStore = defineStore('structure', () => {
   function removeSequence(actId: string, seqId: string) {
     const act = acts.value.find((a) => a.id === actId)
     if (!act) return
+    const sceneIds = act.sequences.find((s) => s.id === seqId)?.scenes.map((scene) => scene.id) ?? []
     act.sequences = act.sequences.filter((s) => s.id !== seqId)
     cleanupOwner('sequence', seqId)
+    for (const sceneId of sceneIds) cleanupOwner('scene', sceneId)
     removeValuePointsForTarget('sequence', seqId)
+    for (const sceneId of sceneIds) removeValuePointsForTarget('scene', sceneId)
+    save()
+  }
+
+  function addScene(actId: string, seqId: string): StructureScene | undefined {
+    const seq = acts.value.find((a) => a.id === actId)?.sequences.find((s) => s.id === seqId)
+    if (!seq) return undefined
+    const scene: StructureScene = {
+      id: `scene-${nextSceneNum++}`,
+      label: `场景 ${seq.scenes.length + 1}`,
+      core: createEmptySceneCore(),
+      beats: [],
+    }
+    seq.scenes.push(scene)
+    save()
+    return scene
+  }
+
+  function removeScene(actId: string, seqId: string, sceneId: string) {
+    const seq = acts.value.find((a) => a.id === actId)?.sequences.find((s) => s.id === seqId)
+    if (!seq) return
+    const beatIds = seq.scenes.find((scene) => scene.id === sceneId)?.beats.map((beat) => beat.id) ?? []
+    seq.scenes = seq.scenes.filter((scene) => scene.id !== sceneId)
+    cleanupOwner('scene', sceneId)
+    for (const beatId of beatIds) removeValuePointsForTarget('scene', beatId)
+    removeValuePointsForTarget('scene', sceneId)
+    save()
+  }
+
+  function addBeat(actId: string, seqId: string, sceneId: string): StructureBeat | undefined {
+    const scene = acts.value
+      .find((a) => a.id === actId)
+      ?.sequences.find((s) => s.id === seqId)
+      ?.scenes.find((item) => item.id === sceneId)
+    if (!scene) return undefined
+    const beat: StructureBeat = {
+      id: `beat-${nextBeatNum++}`,
+      label: `节拍 ${scene.beats.length + 1}`,
+      summary: '',
+    }
+    scene.beats.push(beat)
+    save()
+    return beat
+  }
+
+  function removeBeat(actId: string, seqId: string, sceneId: string, beatId: string) {
+    const scene = acts.value
+      .find((a) => a.id === actId)
+      ?.sequences.find((s) => s.id === seqId)
+      ?.scenes.find((item) => item.id === sceneId)
+    if (!scene) return
+    scene.beats = scene.beats.filter((beat) => beat.id !== beatId)
+    removeValuePointsForTarget('scene', beatId)
+    save()
+  }
+
+  function updateBeatSummary(
+    actId: string,
+    seqId: string,
+    sceneId: string,
+    beatId: string,
+    summary: string,
+  ) {
+    const scene = acts.value
+      .find((a) => a.id === actId)
+      ?.sequences.find((s) => s.id === seqId)
+      ?.scenes.find((item) => item.id === sceneId)
+    const beat = scene?.beats.find((item) => item.id === beatId)
+    if (!beat) return
+    beat.summary = summary
+    save()
+  }
+
+  function updateSceneLabel(actId: string, seqId: string, sceneId: string, label: string) {
+    const seq = acts.value.find((a) => a.id === actId)?.sequences.find((s) => s.id === seqId)
+    const scene = seq?.scenes.find((item) => item.id === sceneId)
+    if (!scene) return
+    scene.label = label
     save()
   }
 
@@ -386,6 +593,32 @@ export const useStructureStore = defineStore('structure', () => {
     const act = acts.value.find((a) => a.id === actId)
     if (!act) return
     act.core[field] = value
+    save()
+  }
+
+  function updateSequenceCoreField(
+    actId: string,
+    seqId: string,
+    field: SequenceCoreTextField,
+    value: string,
+  ) {
+    const seq = acts.value.find((a) => a.id === actId)?.sequences.find((s) => s.id === seqId)
+    if (!seq) return
+    seq.core[field] = value
+    save()
+  }
+
+  function updateSceneCoreField(
+    actId: string,
+    seqId: string,
+    sceneId: string,
+    field: SceneCoreTextField,
+    value: string,
+  ) {
+    const seq = acts.value.find((a) => a.id === actId)?.sequences.find((s) => s.id === seqId)
+    const scene = seq?.scenes.find((item) => item.id === sceneId)
+    if (!scene) return
+    scene.core[field] = value
     save()
   }
 
@@ -570,11 +803,19 @@ export const useStructureStore = defineStore('structure', () => {
     removeAct,
     addSequence,
     removeSequence,
+    addScene,
+    removeScene,
+    addBeat,
+    removeBeat,
+    updateBeatSummary,
+    updateSceneLabel,
     updateActColor,
     updateActLabel,
     updateSequenceColor,
     updateSequenceLabel,
     updateActCoreField,
+    updateSequenceCoreField,
+    updateSceneCoreField,
     getValueAxesForOwner,
     getVisibleAxisIds,
     addValueAxis,
