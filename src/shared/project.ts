@@ -166,6 +166,26 @@ export type ProjectExportProofResult =
     }
   | { ok: false; canceled?: boolean; error: string }
 
+export interface ProjectVerifyProofIssue {
+  code: string
+  message: string
+}
+
+export type ProjectVerifyProofResult =
+  | {
+      ok: true
+      filePath: string
+      valid: boolean
+      projectTitle: string
+      createdAt: string
+      recordedProjectDocumentSha256: string
+      actualProjectDocumentSha256: string
+      recordedProofPayloadSha256: string
+      actualProofPayloadSha256: string
+      issues: ProjectVerifyProofIssue[]
+    }
+  | { ok: false; canceled?: boolean; error: string }
+
 export interface ImportedAsset {
   relativePath: string
   originalName: string
@@ -184,6 +204,7 @@ export interface ProjectApi {
   readAssetFile(relativePath: string): Promise<ProjectReadAssetResult>
   exportPdf(options?: ProjectExportPdfOptions): Promise<ProjectExportPdfResult>
   exportProof(options: ProjectExportProofOptions): Promise<ProjectExportProofResult>
+  verifyProof(): Promise<ProjectVerifyProofResult>
 }
 
 export type ProjectImportFileResult =

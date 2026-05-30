@@ -12,10 +12,15 @@ import type {
   ProjectLoadResult,
   ProjectOpenFromPathResult,
   ProjectReadAssetResult,
-  ProjectSaveResult
+  ProjectSaveResult,
+  ProjectVerifyProofResult
 } from '../shared/project'
 import { createDefaultProjectDocument, normalizeProjectDocument } from '../shared/project'
-import { buildProjectProofManifest, safeProofFileName } from './project-proof-export'
+import {
+  buildProjectProofManifest,
+  safeProofFileName,
+  verifyProjectProofManifest
+} from './project-proof-export'
 import type { FileProjectRepository } from './project-repository'
 
 const MAX_IMPORT_PATHS = 100
@@ -293,4 +298,40 @@ export function registerProjectIpc(repository: FileProjectRepository): void {
       }
     }
   )
+
+  ipcMain.handle('project:verify-proof', async (event): Promise<ProjectVerifyProofResult> => {
+    try {
+      const win = BrowserWindow.fromWebContents(event.sender)
+      if (!win) return { ok: false, error: '验证窗口不可用' }
+
+      const result = await dialog.showOpenDialog(win, {
+        title: '选择本地创作证明文件',
+        filters: [{ name: 'Story Studio 创作证明', extensions: ['json'] }],
+        properties: ['openFile']
+      })
+
+      if (result.canceled || result.filePaths.length === 0) {
+        return { ok: false, canceled: true, error: '用户取消验证' }
+      }
+
+      const filePath = result.filePaths[0]
+      const raw = await readFile(filePath, 'utf8')
+      const verification = verifyProjectProofManifest(JSON.parse(raw))
+
+      return {
+        ok: true,
+        filePath,
+        valid: verification.valid,
+        projectTitle: verification.manifest.project.title,
+        createdAt: verification.manifest.createdAt,
+        recordedProjectDocumentSha256: verification.manifest.hashes.projectDocumentSha256,
+        actualProjectDocumentSha256: verification.actualProjectDocumentSha256,
+        recordedProofPayloadSha256: verification.manifest.hashes.proofPayloadSha256,
+        actualProofPayloadSha256: verification.actualProofPayloadSha256,
+        issues: verification.issues
+      }
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : '创作证明验证失败' }
+    }
+  })
 }

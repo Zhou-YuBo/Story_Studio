@@ -57,7 +57,8 @@ const api: AppApi = {
     exportProof: (options: ProjectExportProofOptions) => {
       assertExportProofOptions(options, 'options.document must be provided')
       return ipcRenderer.invoke('project:export-proof', options)
-    }
+    },
+    verifyProof: () => ipcRenderer.invoke('project:verify-proof')
   },
   recent: {
     get: () => ipcRenderer.invoke('recent:get'),

@@ -5,7 +5,8 @@ import type {
   ProjectDocument,
   ProjectProofAsset,
   ProjectProofManifest,
-  ProjectProofWarning
+  ProjectProofWarning,
+  ProjectVerifyProofIssue
 } from '../shared/project'
 import { normalizeProjectDocument } from '../shared/project'
 import type { FileProjectRepository } from './project-repository'
@@ -19,6 +20,14 @@ export interface ProjectProofBuildResult {
   projectDocumentSha256: string
   proofPayloadSha256: string
   serializedManifest: string
+}
+
+export interface ProjectProofVerification {
+  manifest: ProjectProofManifest
+  valid: boolean
+  actualProjectDocumentSha256: string
+  actualProofPayloadSha256: string
+  issues: ProjectVerifyProofIssue[]
 }
 
 export async function buildProjectProofManifest(
@@ -88,12 +97,73 @@ export async function buildProjectProofManifest(
   }
 }
 
+export function verifyProjectProofManifest(value: unknown): ProjectProofVerification {
+  if (!isProjectProofManifest(value)) {
+    throw new Error('请选择有效的 Story Studio 创作证明文件')
+  }
+
+  const snapshot = normalizeProjectDocument(value.snapshot)
+  const actualProjectDocumentSha256 = sha256String(stableStringify(snapshot))
+  const actualProofPayloadSha256 = sha256String(
+    stableStringify({
+      ...value,
+      snapshot,
+      hashes: {
+        ...value.hashes,
+        proofPayloadSha256: undefined
+      }
+    })
+  )
+  const issues: ProjectVerifyProofIssue[] = []
+
+  if (value.hashes.projectDocumentSha256 !== actualProjectDocumentSha256) {
+    issues.push({
+      code: 'project-document-hash-mismatch',
+      message: '快照内容和记录的项目指纹不一致。'
+    })
+  }
+
+  if (value.hashes.proofPayloadSha256 !== actualProofPayloadSha256) {
+    issues.push({
+      code: 'proof-payload-hash-mismatch',
+      message: '证明文件整体内容和记录的证明指纹不一致。'
+    })
+  }
+
+  return {
+    manifest: value,
+    valid: issues.length === 0,
+    actualProjectDocumentSha256,
+    actualProofPayloadSha256,
+    issues
+  }
+}
+
 export function safeProofFileName(title: string | undefined): string {
   const name = title?.trim() || APP_NAME
   return `${name
     .split('')
     .map((char) => (/[<>:"/\\|?*]/.test(char) || char.charCodeAt(0) < 32 ? '_' : char))
     .join('')}.story-proof.json`
+}
+
+function isProjectProofManifest(value: unknown): value is ProjectProofManifest {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
+  const manifest = value as Partial<ProjectProofManifest>
+  return (
+    manifest.format === 'story-studio.local-proof' &&
+    manifest.version === 1 &&
+    typeof manifest.createdAt === 'string' &&
+    typeof manifest.project === 'object' &&
+    manifest.project !== null &&
+    typeof manifest.hashes === 'object' &&
+    manifest.hashes !== null &&
+    manifest.hashes.algorithm === 'sha256' &&
+    typeof manifest.hashes.projectDocumentSha256 === 'string' &&
+    typeof manifest.hashes.proofPayloadSha256 === 'string' &&
+    typeof manifest.snapshot === 'object' &&
+    manifest.snapshot !== null
+  )
 }
 
 function stableStringify(value: unknown): string {

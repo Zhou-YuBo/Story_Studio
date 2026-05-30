@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, ref } from 'vue'
-import type { ProjectProofWarning } from '../../../shared/project'
+import type { ProjectProofWarning, ProjectVerifyProofResult } from '../../../shared/project'
 import ScreenplayPdfPreview from '../components/editor/export/ScreenplayPdfPreview.vue'
 import {
   FONT_FAMILY,
@@ -11,7 +11,8 @@ import {
 import { buildExportPages } from '../components/editor/export/build-export-pages'
 import { useProjectStore } from '../stores/project'
 
-type ExportMode = 'home' | 'pdf' | 'proof'
+type ExportMode = 'home' | 'pdf' | 'proof' | 'verify'
+type ProofVerificationSuccess = Extract<ProjectVerifyProofResult, { ok: true }>
 
 const projectStore = useProjectStore()
 const mode = ref<ExportMode>('home')
@@ -23,6 +24,9 @@ const proofError = ref('')
 const proofPath = ref('')
 const proofProjectHash = ref('')
 const proofWarnings = ref<ProjectProofWarning[]>([])
+const isVerifyingProof = ref(false)
+const verifyError = ref('')
+const verification = ref<ProofVerificationSuccess | null>(null)
 
 const sceneDoc = computed(() => projectStore.sceneDoc)
 const pagination = computed(() => buildExportPages(sceneDoc.value))
@@ -82,6 +86,26 @@ async function exportProof(): Promise<void> {
     isExportingProof.value = false
   }
 }
+
+async function verifyProof(): Promise<void> {
+  if (isVerifyingProof.value) return
+  verifyError.value = ''
+  verification.value = null
+  isVerifyingProof.value = true
+
+  try {
+    const result = await window.api.project.verifyProof()
+    if (!result.ok) {
+      if (!result.canceled) verifyError.value = result.error
+      return
+    }
+    verification.value = result
+  } catch (error) {
+    verifyError.value = error instanceof Error ? error.message : '创作证明验证失败'
+  } finally {
+    isVerifyingProof.value = false
+  }
+}
 </script>
 
 <template>
@@ -107,12 +131,12 @@ async function exportProof(): Promise<void> {
         <em>.story-proof.json · 不上传服务器</em>
       </button>
 
-      <article class="entry-card disabled-card">
-        <span class="entry-kicker">后续预留</span>
+      <button class="entry-card" type="button" @click="openMode('verify')">
+        <span class="entry-kicker">自洽检查</span>
         <strong>验证证明文件</strong>
-        <span>未来用于导入证明文件并核对项目指纹。</span>
-        <em>尚未开放</em>
-      </article>
+        <span>导入 .story-proof.json，检查文件里的快照和指纹是否对得上。</span>
+        <em>只验证文件自身是否自洽</em>
+      </button>
 
       <article class="entry-card disabled-card">
         <span class="entry-kicker">后续预留</span>
@@ -161,7 +185,7 @@ async function exportProof(): Promise<void> {
     </main>
   </div>
 
-  <div v-else class="proof-workspace scrollbar-editor">
+  <div v-else-if="mode === 'proof'" class="proof-workspace scrollbar-editor">
     <section class="proof-card">
       <button class="back-button" type="button" @click="openMode('home')">← 导出首页</button>
       <div>
@@ -205,6 +229,64 @@ async function exportProof(): Promise<void> {
           {{ proofWarnings.length }} 项素材未能完整计算指纹，详情已写入证明文件。
         </p>
         <p v-if="proofError" class="export-error">{{ proofError }}</p>
+      </div>
+    </section>
+  </div>
+
+  <div v-else class="proof-workspace scrollbar-editor">
+    <section class="proof-card">
+      <button class="back-button" type="button" @click="openMode('home')">← 导出首页</button>
+      <div>
+        <p class="export-kicker">验证证明文件</p>
+        <h1>检查快照是否自洽</h1>
+        <p class="export-help">
+          这个验证只做一件事：检查证明文件里的快照，和文件里记录的指纹是否对得上。它能发现文件内部是否被改乱，但不能证明外部时间、法律效力，也不能证明作品一定原创。
+        </p>
+      </div>
+
+      <div class="plain-explain">
+        <strong>通俗理解</strong>
+        <span
+          >如果快照和指纹对得上，说明这份证明文件内部是自洽的；如果对不上，说明文件内容或指纹至少有一处不一致。</span
+        >
+      </div>
+
+      <button class="export-button proof-action" :disabled="isVerifyingProof" @click="verifyProof">
+        {{ isVerifyingProof ? '验证中...' : '选择证明文件验证' }}
+      </button>
+
+      <div v-if="verification || verifyError" class="proof-result">
+        <template v-if="verification">
+          <p :class="verification.valid ? 'export-success' : 'export-error'">
+            {{
+              verification.valid
+                ? '验证通过：这个证明文件自身是自洽的。'
+                : '验证未通过：这个证明文件内部不一致。'
+            }}
+          </p>
+          <dl class="export-meta proof-meta">
+            <div>
+              <dt>项目</dt>
+              <dd>{{ verification.projectTitle }}</dd>
+            </div>
+            <div>
+              <dt>创建时间</dt>
+              <dd>{{ verification.createdAt }}</dd>
+            </div>
+            <div>
+              <dt>记录的项目指纹</dt>
+              <dd>{{ verification.recordedProjectDocumentSha256 }}</dd>
+            </div>
+            <div>
+              <dt>重新计算的项目指纹</dt>
+              <dd>{{ verification.actualProjectDocumentSha256 }}</dd>
+            </div>
+          </dl>
+          <ul v-if="verification.issues.length" class="issue-list">
+            <li v-for="issue in verification.issues" :key="issue.code">{{ issue.message }}</li>
+          </ul>
+        </template>
+        <p v-if="verifyError" class="export-error">{{ verifyError }}</p>
       </div>
     </section>
   </div>
@@ -463,6 +545,36 @@ button.entry-card:hover {
   gap: 10px;
   padding-top: 18px;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.plain-explain {
+  display: grid;
+  gap: 8px;
+  padding: 14px 16px;
+  border: 1px solid rgba(165, 180, 252, 0.2);
+  border-radius: 14px;
+  background: rgba(49, 46, 129, 0.2);
+}
+
+.plain-explain strong {
+  color: #e0e7ff;
+  font-size: 13px;
+}
+
+.plain-explain span {
+  color: #c7d2fe;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.issue-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 18px;
+  color: #fca5a5;
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 :global(.pdf-export-printing) .export-panel {
