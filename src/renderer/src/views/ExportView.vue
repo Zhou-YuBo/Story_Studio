@@ -11,7 +11,10 @@ import {
 import { buildExportPages } from '../components/editor/export/build-export-pages'
 import { useProjectStore } from '../stores/project'
 
+type ExportMode = 'home' | 'pdf' | 'proof'
+
 const projectStore = useProjectStore()
+const mode = ref<ExportMode>('home')
 const isExporting = ref(false)
 const exportError = ref('')
 const exportedPath = ref('')
@@ -23,6 +26,10 @@ const proofWarnings = ref<ProjectProofWarning[]>([])
 
 const sceneDoc = computed(() => projectStore.sceneDoc)
 const pagination = computed(() => buildExportPages(sceneDoc.value))
+
+function openMode(nextMode: ExportMode): void {
+  mode.value = nextMode
+}
 
 async function exportPdf(): Promise<void> {
   if (isExporting.value) return
@@ -78,15 +85,53 @@ async function exportProof(): Promise<void> {
 </script>
 
 <template>
-  <div class="export-view">
+  <div v-if="mode === 'home'" class="export-home scrollbar-editor">
+    <section class="home-hero">
+      <p class="export-kicker">导出工作台</p>
+      <h1>{{ projectStore.title }}</h1>
+      <p>把作品交付出去，或为当前创作状态留下可复核的本地记录。</p>
+    </section>
+
+    <section class="entry-grid">
+      <button class="entry-card primary" type="button" @click="openMode('pdf')">
+        <span class="entry-kicker">剧本输出</span>
+        <strong>剧本 PDF 导出</strong>
+        <span>预览 Letter 剧本页面，并导出当前场景正文 PDF。</span>
+        <em>{{ pagination.totalPages }} 页 · {{ FONT_FAMILY }}</em>
+      </button>
+
+      <button class="entry-card" type="button" @click="openMode('proof')">
+        <span class="entry-kicker">创作存证</span>
+        <strong>本地创作证明</strong>
+        <span>导出项目快照、SHA-256 指纹和受管理素材指纹。</span>
+        <em>.story-proof.json · 不上传服务器</em>
+      </button>
+
+      <article class="entry-card disabled-card">
+        <span class="entry-kicker">后续预留</span>
+        <strong>验证证明文件</strong>
+        <span>未来用于导入证明文件并核对项目指纹。</span>
+        <em>尚未开放</em>
+      </article>
+
+      <article class="entry-card disabled-card">
+        <span class="entry-kicker">后续预留</span>
+        <strong>阶段快照列表</strong>
+        <span>未来用于管理阶段性快照与证明记录。</span>
+        <em>尚未开放</em>
+      </article>
+    </section>
+  </div>
+
+  <div v-else-if="mode === 'pdf'" class="export-view">
     <aside class="export-panel">
+      <button class="back-button" type="button" @click="openMode('home')">← 导出首页</button>
       <div>
-        <p class="export-kicker">导出工作台</p>
+        <p class="export-kicker">剧本 PDF</p>
         <h1>{{ projectStore.title }}</h1>
       </div>
 
       <section class="export-section">
-        <p class="section-title">剧本 PDF</p>
         <dl class="export-meta">
           <div>
             <dt>页面</dt>
@@ -109,47 +154,159 @@ async function exportProof(): Promise<void> {
         <p v-if="exportedPath" class="export-success">已导出：{{ exportedPath }}</p>
         <p v-if="exportError" class="export-error">{{ exportError }}</p>
       </section>
-
-      <section class="export-section proof-section">
-        <p class="section-title">本地创作证明</p>
-        <p class="export-help">
-          导出当前项目快照与 SHA-256 指纹，用于本地留存创作记录。不会上传服务器，不等同于法律公证。
-        </p>
-        <dl class="export-meta compact">
-          <div>
-            <dt>包含</dt>
-            <dd>剧本、结构、人物、灵感、世界、提醒</dd>
-          </div>
-          <div>
-            <dt>素材</dt>
-            <dd>受管理素材文件指纹</dd>
-          </div>
-          <div>
-            <dt>格式</dt>
-            <dd>.story-proof.json</dd>
-          </div>
-        </dl>
-
-        <button class="export-button secondary" :disabled="isExportingProof" @click="exportProof">
-          {{ isExportingProof ? '生成中...' : '导出创作证明' }}
-        </button>
-
-        <p v-if="proofPath" class="export-success">已导出：{{ proofPath }}</p>
-        <p v-if="proofProjectHash" class="proof-hash">项目指纹：{{ proofProjectHash }}</p>
-        <p v-if="proofWarnings.length" class="export-warning">
-          {{ proofWarnings.length }} 项素材未能完整计算指纹，详情已写入证明文件。
-        </p>
-        <p v-if="proofError" class="export-error">{{ proofError }}</p>
-      </section>
     </aside>
 
     <main class="export-preview scrollbar-editor">
       <ScreenplayPdfPreview :scene-doc="sceneDoc" />
     </main>
   </div>
+
+  <div v-else class="proof-workspace scrollbar-editor">
+    <section class="proof-card">
+      <button class="back-button" type="button" @click="openMode('home')">← 导出首页</button>
+      <div>
+        <p class="export-kicker">本地创作证明</p>
+        <h1>{{ projectStore.title }}</h1>
+        <p class="export-help">
+          导出当前项目快照与 SHA-256 指纹，用于本地留存创作记录。不会上传服务器，不等同于法律公证。
+        </p>
+      </div>
+
+      <dl class="export-meta proof-meta">
+        <div>
+          <dt>包含</dt>
+          <dd>剧本、结构、人物、灵感、世界、提醒</dd>
+        </div>
+        <div>
+          <dt>素材</dt>
+          <dd>受管理素材文件指纹，不复制素材原文件</dd>
+        </div>
+        <div>
+          <dt>格式</dt>
+          <dd>.story-proof.json</dd>
+        </div>
+        <div>
+          <dt>边界</dt>
+          <dd>本地证明文件，不包含服务器时间戳、第三方存证或版权登记</dd>
+        </div>
+      </dl>
+
+      <button class="export-button proof-action" :disabled="isExportingProof" @click="exportProof">
+        {{ isExportingProof ? '生成中...' : '导出创作证明' }}
+      </button>
+
+      <div
+        v-if="proofPath || proofProjectHash || proofWarnings.length || proofError"
+        class="proof-result"
+      >
+        <p v-if="proofPath" class="export-success">已导出：{{ proofPath }}</p>
+        <p v-if="proofProjectHash" class="proof-hash">项目指纹：{{ proofProjectHash }}</p>
+        <p v-if="proofWarnings.length" class="export-warning">
+          {{ proofWarnings.length }} 项素材未能完整计算指纹，详情已写入证明文件。
+        </p>
+        <p v-if="proofError" class="export-error">{{ proofError }}</p>
+      </div>
+    </section>
+  </div>
 </template>
 
 <style scoped>
+.export-home,
+.proof-workspace {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: auto;
+  background:
+    radial-gradient(circle at 24% 18%, rgba(139, 92, 246, 0.16), transparent 30%), #171717;
+  color: #e5e5e5;
+}
+
+.export-home {
+  padding: 56px 64px;
+}
+
+.home-hero {
+  max-width: 680px;
+  margin-bottom: 32px;
+}
+
+.home-hero h1,
+.proof-card h1,
+.export-panel h1 {
+  margin: 0;
+  font-size: 28px;
+  line-height: 1.2;
+}
+
+.home-hero p {
+  margin: 12px 0 0;
+  color: #a1a1aa;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.entry-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(240px, 420px));
+  gap: 18px;
+}
+
+.entry-card {
+  display: flex;
+  min-height: 188px;
+  flex-direction: column;
+  gap: 12px;
+  padding: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 22px;
+  color: inherit;
+  background: rgba(24, 24, 27, 0.82);
+  text-align: left;
+}
+
+button.entry-card {
+  cursor: pointer;
+}
+
+button.entry-card:hover {
+  border-color: rgba(167, 139, 250, 0.5);
+  background: rgba(39, 39, 42, 0.92);
+}
+
+.entry-card.primary {
+  border-color: rgba(245, 245, 245, 0.18);
+  background: linear-gradient(135deg, rgba(245, 245, 245, 0.12), rgba(39, 39, 42, 0.86));
+}
+
+.entry-kicker {
+  color: #a1a1aa;
+  font-size: 12px;
+  letter-spacing: 0.14em;
+}
+
+.entry-card strong {
+  color: #f4f4f5;
+  font-size: 20px;
+}
+
+.entry-card span:not(.entry-kicker) {
+  color: #c4c4cc;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.entry-card em {
+  margin-top: auto;
+  color: #a5b4fc;
+  font-size: 12px;
+  font-style: normal;
+}
+
+.disabled-card {
+  opacity: 0.5;
+}
+
 .export-view {
   display: grid;
   grid-template-columns: 280px minmax(0, 1fr);
@@ -176,10 +333,17 @@ async function exportProof(): Promise<void> {
   letter-spacing: 0.16em;
 }
 
-h1 {
-  margin: 0;
-  font-size: 24px;
-  line-height: 1.2;
+.back-button {
+  width: fit-content;
+  border: 0;
+  color: #a1a1aa;
+  background: transparent;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.back-button:hover {
+  color: #f4f4f5;
 }
 
 .export-section {
@@ -188,23 +352,11 @@ h1 {
   gap: 14px;
 }
 
-.proof-section {
-  padding-top: 20px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.section-title {
-  margin: 0;
-  color: #f4f4f5;
-  font-size: 13px;
-  font-weight: 700;
-}
-
 .export-help {
-  margin: 0;
+  margin: 12px 0 0;
   color: #a1a1aa;
-  font-size: 12px;
-  line-height: 1.6;
+  font-size: 13px;
+  line-height: 1.7;
 }
 
 .export-meta {
@@ -231,14 +383,6 @@ h1 {
   line-height: 1.4;
 }
 
-.export-meta.compact {
-  gap: 10px;
-}
-
-.export-meta.compact dd {
-  font-size: 12px;
-}
-
 .export-button {
   height: 40px;
   border: 1px solid rgba(255, 255, 255, 0.18);
@@ -247,11 +391,6 @@ h1 {
   background: #f5f5f5;
   font-weight: 700;
   cursor: pointer;
-}
-
-.export-button.secondary {
-  color: #f4f4f5;
-  background: #27272a;
 }
 
 .export-button:disabled {
@@ -290,6 +429,40 @@ h1 {
   overflow: auto;
   padding: 32px;
   background: #242424;
+}
+
+.proof-workspace {
+  display: grid;
+  place-items: center;
+  padding: 48px;
+}
+
+.proof-card {
+  display: flex;
+  width: min(720px, 100%);
+  flex-direction: column;
+  gap: 24px;
+  padding: 28px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 24px;
+  background: rgba(17, 17, 17, 0.92);
+}
+
+.proof-meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.proof-action {
+  width: 220px;
+}
+
+.proof-result {
+  display: grid;
+  gap: 10px;
+  padding-top: 18px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 :global(.pdf-export-printing) .export-panel {
