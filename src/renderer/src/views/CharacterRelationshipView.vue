@@ -205,11 +205,22 @@ function saveRelationship(): void {
 <template>
   <div class="relationship-page">
     <header class="relationship-header">
-      <div>
-        <p class="section-kicker">人物工作台 / 二人关系</p>
-        <h1>二人关系</h1>
+      <div class="relationship-topbar">
+        <div>
+          <p class="section-kicker">人物工作台 / 二人关系</p>
+          <h1>二人关系</h1>
+        </div>
+        <div class="header-side-actions">
+          <RouterLink class="back-button" to="/character">返回首页</RouterLink>
+          <PortableCharacterDetailTrigger
+            class="relationship-detail-trigger"
+            :character-name="portableCharacterName"
+            @open="detailPanelOpen = true"
+          />
+        </div>
       </div>
-      <section class="relationship-selector">
+
+      <section class="relationship-toolbar">
         <label>
           <span>人物 A</span>
           <select v-model="characterAId">
@@ -243,14 +254,6 @@ function saveRelationship(): void {
           </select>
         </label>
       </section>
-      <div class="header-side-actions">
-        <RouterLink class="back-button" to="/character">返回首页</RouterLink>
-        <PortableCharacterDetailTrigger
-          class="relationship-detail-trigger"
-          :character-name="portableCharacterName"
-          @open="detailPanelOpen = true"
-        />
-      </div>
     </header>
 
     <main v-if="relationship && characterA && characterB" class="relationship-workbench">
@@ -264,7 +267,7 @@ function saveRelationship(): void {
           <span>{{ field.label }}</span>
           <textarea
             v-model="getRelationshipSelf(relationship, characterA)[field.key]"
-            rows="1"
+            rows="2"
             @blur="saveRelationship"
           />
         </label>
@@ -346,24 +349,34 @@ function saveRelationship(): void {
           </div>
 
           <div v-if="activeNode" class="active-node-editor">
-            <label>
-              <span>关联剧情位置</span>
-              <input
-                v-model="activeNode.structurePosition"
-                placeholder="某一幕 / 某一序列 / 某一场景"
-                @blur="saveRelationship"
-              />
-            </label>
-            <label>
-              <span>亲疏程度</span>
-              <input
-                v-model.number="activeNode.closeness"
-                type="range"
-                min="0"
-                max="100"
-                @change="saveRelationship"
-              />
-            </label>
+            <div class="active-node-controls">
+              <label>
+                <span>关联剧情位置</span>
+                <input
+                  v-model="activeNode.structurePosition"
+                  placeholder="某一幕 / 某一序列 / 某一场景"
+                  @blur="saveRelationship"
+                />
+              </label>
+              <label>
+                <span>亲疏程度</span>
+                <input
+                  v-model.number="activeNode.closeness"
+                  type="range"
+                  min="0"
+                  max="100"
+                  @change="saveRelationship"
+                />
+              </label>
+              <button
+                class="text-button"
+                type="button"
+                :disabled="relationship.changeNodes.length <= 2"
+                @click="removeActiveNode(relationship.id)"
+              >
+                删除当前节点
+              </button>
+            </div>
             <label class="active-node-turning-point">
               <span>发生了什么</span>
               <textarea
@@ -373,14 +386,6 @@ function saveRelationship(): void {
                 @blur="saveRelationship"
               />
             </label>
-            <button
-              class="text-button"
-              type="button"
-              :disabled="relationship.changeNodes.length <= 2"
-              @click="removeActiveNode(relationship.id)"
-            >
-              删除当前节点
-            </button>
           </div>
         </section>
 
@@ -416,7 +421,7 @@ function saveRelationship(): void {
           <span>{{ field.label }}</span>
           <textarea
             v-model="getRelationshipSelf(relationship, characterB)[field.key]"
-            rows="1"
+            rows="2"
             @blur="saveRelationship"
           />
         </label>
@@ -454,14 +459,18 @@ function saveRelationship(): void {
 }
 
 .relationship-header {
-  height: 76px;
   flex-shrink: 0;
   display: grid;
-  grid-template-columns: auto minmax(520px, 1fr) auto;
-  align-items: center;
-  gap: 18px;
+  gap: 10px;
   border-bottom: 1px solid rgba(63, 63, 70, 0.82);
-  padding: 12px 22px;
+  padding: 12px 22px 14px;
+}
+
+.relationship-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
 }
 
 .relationship-header h1,
@@ -504,26 +513,24 @@ function saveRelationship(): void {
 }
 
 .header-side-actions {
-  position: relative;
-  align-self: stretch;
-  display: grid;
-  align-content: start;
-  justify-items: end;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
   gap: 8px;
 }
 
 .header-side-actions :deep(.relationship-detail-trigger) {
   position: static;
-  width: 118px;
+  width: 128px;
   border-right: 1px solid rgba(113, 113, 122, 0.82);
   border-radius: 14px;
   padding: 9px 11px;
-  transform: translateX(76px);
+  transform: none;
 }
 
 .header-side-actions :deep(.relationship-detail-trigger:hover),
 .header-side-actions :deep(.relationship-detail-trigger:focus-visible) {
-  transform: translateX(0);
+  transform: none;
 }
 
 .text-button {
@@ -536,21 +543,21 @@ function saveRelationship(): void {
   opacity: 0.38;
 }
 
-.relationship-selector {
+.relationship-toolbar {
   display: grid;
   grid-template-columns: minmax(180px, 1fr) auto minmax(180px, 1fr);
   align-items: end;
   gap: 14px;
 }
 
-.relationship-selector label {
+.relationship-toolbar label {
   display: grid;
   gap: 5px;
   color: #a1a1aa;
   font-size: 11px;
 }
 
-.relationship-selector select,
+.relationship-toolbar select,
 .self-row textarea,
 .definition-cell textarea,
 .active-node-editor input,
@@ -584,7 +591,7 @@ function saveRelationship(): void {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(250px, 0.86fr) minmax(420px, 1.28fr) minmax(250px, 0.86fr);
+  grid-template-columns: minmax(210px, 280px) minmax(540px, 1fr) minmax(210px, 280px);
   gap: 12px;
   overflow: hidden;
   padding: 12px 18px 18px;
@@ -607,9 +614,9 @@ function saveRelationship(): void {
 }
 
 .self-column {
-  display: grid;
-  grid-template-rows: auto repeat(4, minmax(0, 1fr));
-  gap: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   padding: 12px;
 }
 
@@ -619,11 +626,12 @@ function saveRelationship(): void {
 }
 
 .self-row {
-  min-height: 0;
   display: grid;
-  grid-template-columns: 86px minmax(0, 1fr);
-  align-items: stretch;
-  gap: 8px;
+  gap: 5px;
+  border: 1px solid rgba(63, 63, 70, 0.62);
+  border-radius: 14px;
+  background: rgba(9, 9, 11, 0.18);
+  padding: 8px;
 }
 
 .self-row span,
@@ -636,15 +644,14 @@ function saveRelationship(): void {
 }
 
 .self-row textarea {
-  height: 100%;
-  min-height: 32px;
+  min-height: 52px;
   line-height: 1.45;
-  resize: none;
+  resize: vertical;
 }
 
 .relationship-axis {
   display: grid;
-  grid-template-rows: minmax(0, 1.18fr) minmax(0, 0.82fr);
+  grid-template-rows: minmax(340px, 1fr) auto;
   gap: 12px;
 }
 
@@ -656,11 +663,11 @@ function saveRelationship(): void {
 }
 
 .closeness-panel {
-  grid-template-rows: auto minmax(150px, 1fr) auto;
+  grid-template-rows: auto minmax(220px, 1fr) auto;
 }
 
 .definitions-panel {
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto auto;
 }
 
 .panel-heading {
@@ -804,6 +811,13 @@ function saveRelationship(): void {
 
 .active-node-editor {
   display: grid;
+  gap: 8px;
+  border-top: 1px solid rgba(63, 63, 70, 0.62);
+  padding-top: 10px;
+}
+
+.active-node-controls {
+  display: grid;
   grid-template-columns: minmax(0, 1fr) 170px auto;
   gap: 8px;
   align-items: end;
@@ -814,33 +828,25 @@ function saveRelationship(): void {
   gap: 5px;
 }
 
-.active-node-turning-point {
-  grid-column: 1 / 3;
-}
-
 .active-node-editor input[type='range'] {
   width: 100%;
   accent-color: #a1a1aa;
 }
 
 .active-node-editor textarea {
-  height: 50px;
+  min-height: 48px;
   line-height: 1.45;
-  resize: none;
+  resize: vertical;
 }
 
 .definition-grid {
-  min-height: 0;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  grid-template-rows: repeat(2, minmax(0, 1fr));
   gap: 8px;
 }
 
 .definition-cell {
-  min-height: 0;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
   gap: 5px;
   border: 1px solid rgba(63, 63, 70, 0.62);
   border-radius: 14px;
@@ -849,10 +855,9 @@ function saveRelationship(): void {
 }
 
 .definition-cell textarea {
-  height: 100%;
-  min-height: 46px;
+  min-height: 56px;
   line-height: 1.45;
-  resize: none;
+  resize: vertical;
 }
 
 .empty-state {
@@ -863,13 +868,8 @@ function saveRelationship(): void {
 }
 
 @media (max-width: 1280px) {
-  .relationship-header {
-    grid-template-columns: 1fr auto;
-    height: auto;
-  }
-
-  .relationship-selector {
-    grid-column: 1 / -1;
+  .relationship-toolbar {
+    grid-template-columns: minmax(180px, 1fr) auto minmax(180px, 1fr);
   }
 
   .relationship-workbench {
@@ -877,6 +877,26 @@ function saveRelationship(): void {
     overflow: auto;
     scrollbar-width: thin;
     scrollbar-color: rgba(161, 161, 170, 0.24) transparent;
+  }
+
+  .self-column {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-content: start;
+  }
+
+  .column-heading {
+    grid-column: 1 / -1;
+  }
+
+  .relationship-axis,
+  .closeness-panel,
+  .definitions-panel {
+    overflow: visible;
+  }
+
+  .curve-board {
+    min-height: 320px;
   }
 
   .relationship-workbench::-webkit-scrollbar {
@@ -890,6 +910,76 @@ function saveRelationship(): void {
   .relationship-workbench::-webkit-scrollbar-thumb {
     border-radius: 999px;
     background: rgba(161, 161, 170, 0.2);
+  }
+}
+
+@media (max-width: 920px) {
+  .relationship-header {
+    padding: 12px 16px 14px;
+  }
+
+  .relationship-topbar,
+  .header-side-actions {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .header-side-actions {
+    width: 100%;
+  }
+
+  .relationship-toolbar {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .selector-line {
+    justify-content: center;
+    padding-bottom: 0;
+  }
+
+  .relationship-workbench {
+    padding: 12px 14px 16px;
+  }
+
+  .self-column,
+  .definition-grid,
+  .active-node-controls {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .relationship-page {
+    overflow: auto;
+  }
+
+  .relationship-workbench {
+    overflow: visible;
+  }
+
+  .curve-board {
+    min-height: 280px;
+  }
+}
+
+@media (max-height: 760px) and (min-width: 1281px) {
+  .relationship-header {
+    gap: 8px;
+    padding-block: 10px;
+  }
+
+  .relationship-axis {
+    grid-template-rows: minmax(300px, 1fr) auto;
+  }
+
+  .closeness-panel {
+    grid-template-rows: auto minmax(190px, 1fr) auto;
+  }
+
+  .self-row textarea,
+  .definition-cell textarea {
+    min-height: 48px;
   }
 }
 </style>
