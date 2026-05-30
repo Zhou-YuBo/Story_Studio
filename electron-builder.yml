@@ -1,5 +1,5 @@
-appId: com.electron.app
-productName: story-studio
+appId: cn.richopera.storystudio
+productName: Story Studio
 directories:
   buildResources: build
 files:
@@ -33,11 +33,8 @@ linux:
     - AppImage
     - snap
     - deb
-  maintainer: electronjs.org
+  maintainer: Richopera
   category: Utility
 appImage:
   artifactName: ${name}-${version}.${ext}
 npmRebuild: false
-publish:
-  provider: generic
-  url: https://example.com/auto-updates
