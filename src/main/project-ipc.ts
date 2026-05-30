@@ -15,9 +15,31 @@ import type {
 import { createDefaultProjectDocument } from '../shared/project'
 import type { FileProjectRepository } from './project-repository'
 
+const MAX_IMPORT_PATHS = 100
+
 function safePdfFileName(title: string | undefined): string {
   const name = title?.trim() || 'Story Studio'
   return `${name.replace(/[<>:"/\\|?*\x00-\x1f]/g, '_')}.pdf`
+}
+
+function assertNonEmptyString(value: unknown, message: string): asserts value is string {
+  if (typeof value !== 'string' || value.trim() === '') {
+    throw new Error(message)
+  }
+}
+
+function assertPathList(value: unknown): asserts value is string[] {
+  if (!Array.isArray(value)) {
+    throw new Error('请选择有效的素材文件')
+  }
+
+  if (value.length > MAX_IMPORT_PATHS) {
+    throw new Error(`一次最多导入 ${MAX_IMPORT_PATHS} 个素材文件`)
+  }
+
+  if (!value.every((path) => typeof path === 'string' && path.trim() !== '')) {
+    throw new Error('请选择有效的素材文件')
+  }
 }
 
 export function registerProjectIpc(repository: FileProjectRepository): void {
@@ -99,8 +121,9 @@ export function registerProjectIpc(repository: FileProjectRepository): void {
 
   ipcMain.handle(
     'project:import-paths',
-    async (_, paths: string[]): Promise<ProjectImportFileResult> => {
+    async (_, paths: unknown): Promise<ProjectImportFileResult> => {
       try {
+        assertPathList(paths)
         const assets = await Promise.all(paths.map((p) => repository.importAsset(p)))
         return { ok: true, assets }
       } catch (error) {
@@ -113,8 +136,9 @@ export function registerProjectIpc(repository: FileProjectRepository): void {
 
   ipcMain.handle(
     'project:open-from-path',
-    async (_, filePath: string): Promise<ProjectOpenFromPathResult> => {
+    async (_, filePath: unknown): Promise<ProjectOpenFromPathResult> => {
       try {
+        assertNonEmptyString(filePath, '请选择有效的项目文件')
         const document = await repository.loadFromPath(filePath)
         const info = await repository.getInfo()
         return {
@@ -159,8 +183,9 @@ export function registerProjectIpc(repository: FileProjectRepository): void {
 
   ipcMain.handle(
     'project:read-asset-file',
-    async (_, relativePath: string): Promise<ProjectReadAssetResult> => {
+    async (_, relativePath: unknown): Promise<ProjectReadAssetResult> => {
       try {
+        assertNonEmptyString(relativePath, '请选择有效的素材文件')
         const absolutePath = repository.getAssetAbsolutePath(relativePath)
         const content = await readFile(absolutePath, 'utf-8')
         return { ok: true, content }
