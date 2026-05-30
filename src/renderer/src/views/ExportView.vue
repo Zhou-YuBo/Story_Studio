@@ -1,7 +1,13 @@
 <script setup lang="ts">
 import { computed, nextTick, ref } from 'vue'
+import type { ProjectProofWarning } from '../../../shared/project'
 import ScreenplayPdfPreview from '../components/editor/export/ScreenplayPdfPreview.vue'
-import { FONT_FAMILY, FONT_SIZE_PT, PAGE_HEIGHT_IN, PAGE_WIDTH_IN } from '../components/editor/page-layout/page-config'
+import {
+  FONT_FAMILY,
+  FONT_SIZE_PT,
+  PAGE_HEIGHT_IN,
+  PAGE_WIDTH_IN
+} from '../components/editor/page-layout/page-config'
 import { buildExportPages } from '../components/editor/export/build-export-pages'
 import { useProjectStore } from '../stores/project'
 
@@ -9,6 +15,11 @@ const projectStore = useProjectStore()
 const isExporting = ref(false)
 const exportError = ref('')
 const exportedPath = ref('')
+const isExportingProof = ref(false)
+const proofError = ref('')
+const proofPath = ref('')
+const proofProjectHash = ref('')
+const proofWarnings = ref<ProjectProofWarning[]>([])
 
 const sceneDoc = computed(() => projectStore.sceneDoc)
 const pagination = computed(() => buildExportPages(sceneDoc.value))
@@ -38,6 +49,32 @@ async function exportPdf(): Promise<void> {
     isExporting.value = false
   }
 }
+
+async function exportProof(): Promise<void> {
+  if (isExportingProof.value) return
+  proofError.value = ''
+  proofPath.value = ''
+  proofProjectHash.value = ''
+  proofWarnings.value = []
+  isExportingProof.value = true
+
+  try {
+    const result = await window.api.project.exportProof({
+      document: projectStore.toProjectDocument()
+    })
+    if (!result.ok) {
+      if (!result.canceled) proofError.value = result.error
+      return
+    }
+    proofPath.value = result.filePath
+    proofProjectHash.value = result.projectDocumentSha256
+    proofWarnings.value = result.warnings
+  } catch (error) {
+    proofError.value = error instanceof Error ? error.message : '创作证明导出失败'
+  } finally {
+    isExportingProof.value = false
+  }
+}
 </script>
 
 <template>
@@ -48,27 +85,62 @@ async function exportPdf(): Promise<void> {
         <h1>{{ projectStore.title }}</h1>
       </div>
 
-      <dl class="export-meta">
-        <div>
-          <dt>页面</dt>
-          <dd>US Letter {{ PAGE_WIDTH_IN }}×{{ PAGE_HEIGHT_IN }} in</dd>
-        </div>
-        <div>
-          <dt>字体</dt>
-          <dd>{{ FONT_FAMILY }} / {{ FONT_SIZE_PT }}pt</dd>
-        </div>
-        <div>
-          <dt>页数</dt>
-          <dd>{{ pagination.totalPages }}</dd>
-        </div>
-      </dl>
+      <section class="export-section">
+        <p class="section-title">剧本 PDF</p>
+        <dl class="export-meta">
+          <div>
+            <dt>页面</dt>
+            <dd>US Letter {{ PAGE_WIDTH_IN }}×{{ PAGE_HEIGHT_IN }} in</dd>
+          </div>
+          <div>
+            <dt>字体</dt>
+            <dd>{{ FONT_FAMILY }} / {{ FONT_SIZE_PT }}pt</dd>
+          </div>
+          <div>
+            <dt>页数</dt>
+            <dd>{{ pagination.totalPages }}</dd>
+          </div>
+        </dl>
 
-      <button class="export-button" :disabled="isExporting" @click="exportPdf">
-        {{ isExporting ? '导出中...' : '导出 PDF' }}
-      </button>
+        <button class="export-button" :disabled="isExporting" @click="exportPdf">
+          {{ isExporting ? '导出中...' : '导出 PDF' }}
+        </button>
 
-      <p v-if="exportedPath" class="export-success">已导出：{{ exportedPath }}</p>
-      <p v-if="exportError" class="export-error">{{ exportError }}</p>
+        <p v-if="exportedPath" class="export-success">已导出：{{ exportedPath }}</p>
+        <p v-if="exportError" class="export-error">{{ exportError }}</p>
+      </section>
+
+      <section class="export-section proof-section">
+        <p class="section-title">本地创作证明</p>
+        <p class="export-help">
+          导出当前项目快照与 SHA-256 指纹，用于本地留存创作记录。不会上传服务器，不等同于法律公证。
+        </p>
+        <dl class="export-meta compact">
+          <div>
+            <dt>包含</dt>
+            <dd>剧本、结构、人物、灵感、世界、提醒</dd>
+          </div>
+          <div>
+            <dt>素材</dt>
+            <dd>受管理素材文件指纹</dd>
+          </div>
+          <div>
+            <dt>格式</dt>
+            <dd>.story-proof.json</dd>
+          </div>
+        </dl>
+
+        <button class="export-button secondary" :disabled="isExportingProof" @click="exportProof">
+          {{ isExportingProof ? '生成中...' : '导出创作证明' }}
+        </button>
+
+        <p v-if="proofPath" class="export-success">已导出：{{ proofPath }}</p>
+        <p v-if="proofProjectHash" class="proof-hash">项目指纹：{{ proofProjectHash }}</p>
+        <p v-if="proofWarnings.length" class="export-warning">
+          {{ proofWarnings.length }} 项素材未能完整计算指纹，详情已写入证明文件。
+        </p>
+        <p v-if="proofError" class="export-error">{{ proofError }}</p>
+      </section>
     </aside>
 
     <main class="export-preview scrollbar-editor">
@@ -110,6 +182,31 @@ h1 {
   line-height: 1.2;
 }
 
+.export-section {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.proof-section {
+  padding-top: 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.section-title {
+  margin: 0;
+  color: #f4f4f5;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.export-help {
+  margin: 0;
+  color: #a1a1aa;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
 .export-meta {
   display: flex;
   flex-direction: column;
@@ -134,6 +231,14 @@ h1 {
   line-height: 1.4;
 }
 
+.export-meta.compact {
+  gap: 10px;
+}
+
+.export-meta.compact dd {
+  font-size: 12px;
+}
+
 .export-button {
   height: 40px;
   border: 1px solid rgba(255, 255, 255, 0.18);
@@ -144,13 +249,20 @@ h1 {
   cursor: pointer;
 }
 
+.export-button.secondary {
+  color: #f4f4f5;
+  background: #27272a;
+}
+
 .export-button:disabled {
   cursor: not-allowed;
   opacity: 0.55;
 }
 
 .export-success,
-.export-error {
+.export-error,
+.export-warning,
+.proof-hash {
   margin: 0;
   font-size: 12px;
   line-height: 1.5;
@@ -163,6 +275,14 @@ h1 {
 
 .export-error {
   color: #fca5a5;
+}
+
+.export-warning {
+  color: #fde68a;
+}
+
+.proof-hash {
+  color: #a5b4fc;
 }
 
 .export-preview {

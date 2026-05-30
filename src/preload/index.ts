@@ -1,6 +1,11 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
-import type { AppApi, ProjectDocument, ProjectExportPdfOptions } from '../shared/project'
+import type {
+  AppApi,
+  ProjectDocument,
+  ProjectExportPdfOptions,
+  ProjectExportProofOptions
+} from '../shared/project'
 
 function assertNonEmptyString(value: unknown, message: string): asserts value is string {
   if (typeof value !== 'string' || value.trim() === '') {
@@ -13,6 +18,15 @@ function assertStringArray(value: unknown, message: string): asserts value is st
     !Array.isArray(value) ||
     !value.every((item) => typeof item === 'string' && item.trim() !== '')
   ) {
+    throw new TypeError(message)
+  }
+}
+
+function assertExportProofOptions(
+  value: unknown,
+  message: string
+): asserts value is ProjectExportProofOptions {
+  if (typeof value !== 'object' || value === null || !('document' in value)) {
     throw new TypeError(message)
   }
 }
@@ -39,7 +53,11 @@ const api: AppApi = {
       return ipcRenderer.invoke('project:read-asset-file', relativePath)
     },
     exportPdf: (options?: ProjectExportPdfOptions) =>
-      ipcRenderer.invoke('project:export-pdf', options)
+      ipcRenderer.invoke('project:export-pdf', options),
+    exportProof: (options: ProjectExportProofOptions) => {
+      assertExportProofOptions(options, 'options.document must be provided')
+      return ipcRenderer.invoke('project:export-proof', options)
+    }
   },
   recent: {
     get: () => ipcRenderer.invoke('recent:get'),

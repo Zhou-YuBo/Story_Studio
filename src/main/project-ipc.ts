@@ -1,10 +1,12 @@
-import { BrowserWindow, dialog, ipcMain } from 'electron'
+import { BrowserWindow, app, dialog, ipcMain } from 'electron'
 import { readFile, rename, writeFile } from 'fs/promises'
 import { dirname, join } from 'path'
 import type {
   ProjectDocument,
   ProjectExportPdfOptions,
   ProjectExportPdfResult,
+  ProjectExportProofOptions,
+  ProjectExportProofResult,
   ProjectImportFileResult,
   ProjectImportResult,
   ProjectLoadResult,
@@ -12,7 +14,8 @@ import type {
   ProjectReadAssetResult,
   ProjectSaveResult
 } from '../shared/project'
-import { createDefaultProjectDocument } from '../shared/project'
+import { createDefaultProjectDocument, normalizeProjectDocument } from '../shared/project'
+import { buildProjectProofManifest, safeProofFileName } from './project-proof-export'
 import type { FileProjectRepository } from './project-repository'
 
 const MAX_IMPORT_PATHS = 100
@@ -251,6 +254,42 @@ export function registerProjectIpc(repository: FileProjectRepository): void {
         return { ok: true, filePath: result.filePath }
       } catch (error) {
         return { ok: false, error: error instanceof Error ? error.message : 'PDF 导出失败' }
+      }
+    }
+  )
+
+  ipcMain.handle(
+    'project:export-proof',
+    async (event, options: ProjectExportProofOptions): Promise<ProjectExportProofResult> => {
+      try {
+        const win = BrowserWindow.fromWebContents(event.sender)
+        if (!win) return { ok: false, error: '导出窗口不可用' }
+
+        const document = normalizeProjectDocument(options?.document)
+        const result = await dialog.showSaveDialog(win, {
+          title: '导出本地创作证明',
+          defaultPath: safeProofFileName(document.title),
+          filters: [{ name: 'Story Studio 创作证明', extensions: ['json'] }]
+        })
+
+        if (result.canceled || !result.filePath) {
+          return { ok: false, canceled: true, error: '用户取消导出' }
+        }
+
+        const proof = await buildProjectProofManifest(document, repository, app.getVersion())
+        const tempPath = join(dirname(result.filePath), `.${Date.now()}.tmp.story-proof.json`)
+        await writeFile(tempPath, proof.serializedManifest, 'utf8')
+        await rename(tempPath, result.filePath)
+
+        return {
+          ok: true,
+          filePath: result.filePath,
+          projectDocumentSha256: proof.projectDocumentSha256,
+          proofPayloadSha256: proof.proofPayloadSha256,
+          warnings: proof.manifest.warnings
+        }
+      } catch (error) {
+        return { ok: false, error: error instanceof Error ? error.message : '创作证明导出失败' }
       }
     }
   )

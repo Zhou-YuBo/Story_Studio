@@ -8,3 +8,4 @@ ai-context
 src/renderer/src/labs/
 *.tsbuildinfo
 fix-summary.txt
+website

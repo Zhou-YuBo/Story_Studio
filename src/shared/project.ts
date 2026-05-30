@@ -78,6 +78,54 @@ export interface ProjectInfo {
   assetsPath: string | null
 }
 
+export interface ProjectProofAsset {
+  relativePath: string
+  originalName?: string
+  mimeType?: string
+  createdAt: string
+  status: 'ok' | 'missing' | 'error'
+  size?: number
+  sha256?: string
+  error?: string
+}
+
+export interface ProjectProofWarning {
+  code: string
+  message: string
+}
+
+export interface ProjectProofManifest {
+  format: 'story-studio.local-proof'
+  version: 1
+  createdAt: string
+  app: {
+    name: 'Story Studio'
+    version: string
+  }
+  project: {
+    projectId: string
+    title: string
+    updatedAt: string
+  }
+  scope: {
+    includesProjectSnapshot: true
+    includesManagedAssetHashes: true
+    includesAssetBinaryContents: false
+    includesServerTimestamp: false
+    includesLegalNotarization: false
+  }
+  hashes: {
+    algorithm: 'sha256'
+    canonicalization: 'story-studio-json-stable-v1'
+    projectDocumentSha256: string
+    proofPayloadSha256: string
+  }
+  snapshot: ProjectDocument
+  assets: ProjectProofAsset[]
+  warnings: ProjectProofWarning[]
+  notice: string
+}
+
 export type ProjectLoadResult =
   | { ok: true; document: ProjectDocument; projectPath: string | null; assetsPath: string | null }
   | {
@@ -104,6 +152,20 @@ export interface ProjectExportPdfOptions {
   title?: string
 }
 
+export interface ProjectExportProofOptions {
+  document: ProjectDocument
+}
+
+export type ProjectExportProofResult =
+  | {
+      ok: true
+      filePath: string
+      projectDocumentSha256: string
+      proofPayloadSha256: string
+      warnings: ProjectProofWarning[]
+    }
+  | { ok: false; canceled?: boolean; error: string }
+
 export interface ImportedAsset {
   relativePath: string
   originalName: string
@@ -121,15 +183,14 @@ export interface ProjectApi {
   importPaths(paths: string[]): Promise<ProjectImportFileResult>
   readAssetFile(relativePath: string): Promise<ProjectReadAssetResult>
   exportPdf(options?: ProjectExportPdfOptions): Promise<ProjectExportPdfResult>
+  exportProof(options: ProjectExportProofOptions): Promise<ProjectExportProofResult>
 }
 
 export type ProjectImportFileResult =
   | { ok: true; assets: ImportedAsset[] }
   | { ok: false; canceled?: boolean; error: string }
 
-export type ProjectReadAssetResult =
-  | { ok: true; content: string }
-  | { ok: false; error: string }
+export type ProjectReadAssetResult = { ok: true; content: string } | { ok: false; error: string }
 
 export interface AppApi {
   project: ProjectApi
