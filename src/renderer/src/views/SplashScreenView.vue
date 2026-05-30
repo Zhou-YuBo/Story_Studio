@@ -255,7 +255,7 @@ h2 {
   align-items: center;
   gap: 7px;
   color: rgba(178, 237, 255, 0.46);
-  font-family: 'Splash Agibot', 'Noto Sans SC', sans-serif;
+  font-family: Inter, 'Noto Sans SC', 'Microsoft YaHei UI', sans-serif;
   font-size: 10px;
   letter-spacing: 0.08em;
   white-space: nowrap;
