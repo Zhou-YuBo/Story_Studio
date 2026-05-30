@@ -50,7 +50,7 @@ onBeforeUnmount(() => {
       </div>
       <div class="skycode-credit">
         <img src="@renderer/assets/images/skycode_logo.png" alt="SkyCode" />
-        <span>天码智能社提供算力支持 · SkyCode</span>
+        <span>天码×索奥提供算力支持 · SkyCode</span>
       </div>
     </div>
   </div>
