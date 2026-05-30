@@ -2,6 +2,18 @@ import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
 import type { AppApi, ProjectDocument, ProjectExportPdfOptions } from '../shared/project'
 
+function assertNonEmptyString(value: unknown, message: string): asserts value is string {
+  if (typeof value !== 'string' || value.trim() === '') {
+    throw new TypeError(message)
+  }
+}
+
+function assertStringArray(value: unknown, message: string): asserts value is string[] {
+  if (!Array.isArray(value) || !value.every((item) => typeof item === 'string' && item.trim() !== '')) {
+    throw new TypeError(message)
+  }
+}
+
 // Custom APIs for renderer
 const api: AppApi = {
   project: {
@@ -10,17 +22,33 @@ const api: AppApi = {
     saveAs: (document: ProjectDocument) => ipcRenderer.invoke('project:save-as', document),
     importJson: () => ipcRenderer.invoke('project:import-json'),
     getInfo: () => ipcRenderer.invoke('project:get-info'),
-    openFromPath: (filePath: string) => ipcRenderer.invoke('project:open-from-path', filePath),
+    openFromPath: (filePath: string) => {
+      assertNonEmptyString(filePath, 'filePath must be a non-empty string')
+      return ipcRenderer.invoke('project:open-from-path', filePath)
+    },
     importFile: () => ipcRenderer.invoke('project:import-file'),
-    importPaths: (paths: string[]) => ipcRenderer.invoke('project:import-paths', paths),
-    readAssetFile: (relativePath: string) => ipcRenderer.invoke('project:read-asset-file', relativePath),
+    importPaths: (paths: string[]) => {
+      assertStringArray(paths, 'paths must be a non-empty string array')
+      return ipcRenderer.invoke('project:import-paths', paths)
+    },
+    readAssetFile: (relativePath: string) => {
+      assertNonEmptyString(relativePath, 'relativePath must be a non-empty string')
+      return ipcRenderer.invoke('project:read-asset-file', relativePath)
+    },
     exportPdf: (options?: ProjectExportPdfOptions) =>
       ipcRenderer.invoke('project:export-pdf', options)
   },
   recent: {
     get: () => ipcRenderer.invoke('recent:get'),
-    add: (projectPath: string, title: string) => ipcRenderer.invoke('recent:add', projectPath, title),
-    remove: (projectPath: string) => ipcRenderer.invoke('recent:remove', projectPath)
+    add: (projectPath: string, title: string) => {
+      assertNonEmptyString(projectPath, 'projectPath must be a non-empty string')
+      assertNonEmptyString(title, 'title must be a non-empty string')
+      return ipcRenderer.invoke('recent:add', projectPath, title)
+    },
+    remove: (projectPath: string) => {
+      assertNonEmptyString(projectPath, 'projectPath must be a non-empty string')
+      return ipcRenderer.invoke('recent:remove', projectPath)
+    }
   }
 }
 
