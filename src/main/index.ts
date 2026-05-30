@@ -120,12 +120,24 @@ function isAllowedNavigationUrl(targetUrl: string): boolean {
 
 function getMimeType(ext: string): string {
   const map: Record<string, string> = {
-    '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png',
-    '.gif': 'image/gif', '.webp': 'image/webp', '.svg': 'image/svg+xml',
-    '.bmp': 'image/bmp', '.mp3': 'audio/mpeg', '.wav': 'audio/wav',
-    '.ogg': 'audio/ogg', '.flac': 'audio/flac', '.aac': 'audio/aac',
-    '.m4a': 'audio/mp4', '.pdf': 'application/pdf', '.txt': 'text/plain',
-    '.md': 'text/plain', '.csv': 'text/plain', '.json': 'application/json'
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.png': 'image/png',
+    '.gif': 'image/gif',
+    '.webp': 'image/webp',
+    '.svg': 'image/svg+xml',
+    '.bmp': 'image/bmp',
+    '.mp3': 'audio/mpeg',
+    '.wav': 'audio/wav',
+    '.ogg': 'audio/ogg',
+    '.flac': 'audio/flac',
+    '.aac': 'audio/aac',
+    '.m4a': 'audio/mp4',
+    '.pdf': 'application/pdf',
+    '.txt': 'text/plain',
+    '.md': 'text/plain',
+    '.csv': 'text/plain',
+    '.json': 'application/json'
   }
   return map[ext.toLowerCase()] ?? 'application/octet-stream'
 }

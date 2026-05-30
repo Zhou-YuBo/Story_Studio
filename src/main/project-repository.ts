@@ -14,7 +14,6 @@ import {
 const PROJECT_FILTER = [{ name: 'Story Studio 项目', extensions: ['story.json', 'json'] }]
 const MAX_PROJECT_FILE_SIZE = 50 * 1024 * 1024
 
-
 export class FileProjectRepository {
   private projectFile: string | null = null
   private readonly defaultDir: string

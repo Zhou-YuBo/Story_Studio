@@ -9,7 +9,10 @@ function assertNonEmptyString(value: unknown, message: string): asserts value is
 }
 
 function assertStringArray(value: unknown, message: string): asserts value is string[] {
-  if (!Array.isArray(value) || !value.every((item) => typeof item === 'string' && item.trim() !== '')) {
+  if (
+    !Array.isArray(value) ||
+    !value.every((item) => typeof item === 'string' && item.trim() !== '')
+  ) {
     throw new TypeError(message)
   }
 }

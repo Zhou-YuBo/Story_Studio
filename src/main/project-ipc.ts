@@ -19,7 +19,10 @@ const MAX_IMPORT_PATHS = 100
 
 function safePdfFileName(title: string | undefined): string {
   const name = title?.trim() || 'Story Studio'
-  return `${name.replace(/[<>:"/\\|?*\x00-\x1f]/g, '_')}.pdf`
+  return `${name
+    .split('')
+    .map((char) => (/[<>:"/\\|?*]/.test(char) || char.charCodeAt(0) < 32 ? '_' : char))
+    .join('')}.pdf`
 }
 
 function assertNonEmptyString(value: unknown, message: string): asserts value is string {
@@ -159,7 +162,29 @@ export function registerProjectIpc(repository: FileProjectRepository): void {
       const result = await dialog.showOpenDialog(win!, {
         title: '导入素材文件',
         filters: [
-          { name: '所有支持的格式', extensions: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a', 'pdf', 'txt', 'md', 'csv', 'json'] },
+          {
+            name: '所有支持的格式',
+            extensions: [
+              'jpg',
+              'jpeg',
+              'png',
+              'gif',
+              'webp',
+              'svg',
+              'bmp',
+              'mp3',
+              'wav',
+              'ogg',
+              'flac',
+              'aac',
+              'm4a',
+              'pdf',
+              'txt',
+              'md',
+              'csv',
+              'json'
+            ]
+          },
           { name: '图片', extensions: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp'] },
           { name: '音频', extensions: ['mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a'] },
           { name: 'PDF', extensions: ['pdf'] },
