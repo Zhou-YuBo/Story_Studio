@@ -2,6 +2,10 @@
 import { computed } from 'vue'
 import { useProjectStore } from '../../stores/project'
 
+const emit = defineEmits<{
+  'open-settings': []
+}>()
+
 const projectStore = useProjectStore()
 
 const statusText = computed(() => {
@@ -55,6 +59,12 @@ const pathText = computed(() => projectStore.projectPath ?? '请先保存为 .st
       @click="projectStore.importJson()"
     >
       导入JSON
+    </button>
+    <button
+      class="px-3 py-1 rounded-md bg-zinc-900 border border-zinc-700 hover:bg-zinc-800"
+      @click="emit('open-settings')"
+    >
+      设置
     </button>
   </header>
 </template>

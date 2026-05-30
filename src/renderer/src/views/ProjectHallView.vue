@@ -5,6 +5,7 @@ import { useProjectStore } from '../stores/project'
 
 const emit = defineEmits<{
   'enter-workspace': []
+  'open-settings': []
 }>()
 
 const recentStore = useRecentStore()
@@ -28,7 +29,7 @@ function relativeTime(iso: string): string {
   return new Date(iso).toLocaleDateString()
 }
 
-async function openRecent(path: string) {
+async function openRecent(path: string): Promise<void> {
   const ok = await projectStore.openFromPath(path)
   if (ok) {
     await recentStore.add(path, projectStore.title)
@@ -36,16 +37,16 @@ async function openRecent(path: string) {
   }
 }
 
-async function removeRecent(path: string) {
+async function removeRecent(path: string): Promise<void> {
   await recentStore.remove(path)
 }
 
-async function newProject() {
+async function newProject(): Promise<void> {
   await projectStore.hydrateNew()
   emit('enter-workspace')
 }
 
-async function openFile() {
+async function openFile(): Promise<void> {
   const ok = await projectStore.importJson()
   if (ok) {
     if (projectStore.projectPath) {
@@ -60,6 +61,7 @@ async function openFile() {
   <div class="hall-root">
     <div class="hall-container">
       <div class="hall-header">
+        <button class="hall-settings" type="button" @click="emit('open-settings')">设置</button>
         <h1>Story Studio</h1>
         <p class="hall-subtitle">Where your stories take shape</p>
       </div>
@@ -80,7 +82,9 @@ async function openFile() {
             >
               <div class="hall-item-info">
                 <span class="hall-item-title">{{ project.title }}</span>
-                <span class="hall-item-path" :title="project.projectPath">{{ project.projectPath }}</span>
+                <span class="hall-item-path" :title="project.projectPath">{{
+                  project.projectPath
+                }}</span>
               </div>
               <div class="hall-item-meta">
                 <span class="hall-item-time">{{ relativeTime(project.lastOpenedAt) }}</span>
@@ -88,7 +92,9 @@ async function openFile() {
                   class="hall-item-remove"
                   title="从列表移除"
                   @click.stop="removeRecent(project.projectPath)"
-                >&times;</button>
+                >
+                  &times;
+                </button>
               </div>
             </li>
           </ul>
@@ -118,8 +124,7 @@ async function openFile() {
   height: 100vh;
   background:
     radial-gradient(circle at 70% 20%, rgba(107, 88, 50, 0.18), transparent 32%),
-    radial-gradient(circle at 16% 80%, rgba(57, 88, 112, 0.16), transparent 30%),
-    #07080a;
+    radial-gradient(circle at 16% 80%, rgba(57, 88, 112, 0.16), transparent 30%), #07080a;
 }
 
 .hall-container {
@@ -131,7 +136,25 @@ async function openFile() {
 }
 
 .hall-header {
+  position: relative;
   text-align: center;
+}
+.hall-settings {
+  position: absolute;
+  top: 4px;
+  right: 0;
+  padding: 7px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.035);
+  color: rgba(255, 255, 255, 0.58);
+  font-size: 12px;
+  cursor: pointer;
+}
+.hall-settings:hover {
+  border-color: rgba(128, 235, 255, 0.28);
+  background: rgba(16, 222, 255, 0.08);
+  color: rgba(200, 248, 255, 0.88);
 }
 .hall-header h1 {
   margin: 0;
