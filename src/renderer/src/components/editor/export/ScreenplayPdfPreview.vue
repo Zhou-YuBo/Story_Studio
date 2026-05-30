@@ -123,7 +123,7 @@ function fragmentStyle(fragment: ExportBlockFragment): Record<string, string> {
 
 .pdf-line {
   height: v-bind('`${LINE_HEIGHT_PX}px`');
-  overflow: hidden;
+  overflow: visible;
   white-space: pre;
 }
 
