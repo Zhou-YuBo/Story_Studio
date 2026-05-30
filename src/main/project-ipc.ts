@@ -1,7 +1,10 @@
 import { BrowserWindow, dialog, ipcMain } from 'electron'
-import { readFile } from 'fs/promises'
+import { readFile, rename, writeFile } from 'fs/promises'
+import { dirname, join } from 'path'
 import type {
   ProjectDocument,
+  ProjectExportPdfOptions,
+  ProjectExportPdfResult,
   ProjectImportFileResult,
   ProjectImportResult,
   ProjectLoadResult,
@@ -11,6 +14,11 @@ import type {
 } from '../shared/project'
 import { createDefaultProjectDocument } from '../shared/project'
 import type { FileProjectRepository } from './project-repository'
+
+function safePdfFileName(title: string | undefined): string {
+  const name = title?.trim() || 'Story Studio'
+  return `${name.replace(/[<>:"/\\|?*\x00-\x1f]/g, '_')}.pdf`
+}
 
 export function registerProjectIpc(repository: FileProjectRepository): void {
   ipcMain.handle('project:load', async (): Promise<ProjectLoadResult> => {
@@ -161,6 +169,38 @@ export function registerProjectIpc(repository: FileProjectRepository): void {
           ok: false,
           error: error instanceof Error ? error.message : '文件读取失败'
         }
+      }
+    }
+  )
+
+  ipcMain.handle(
+    'project:export-pdf',
+    async (event, options?: ProjectExportPdfOptions): Promise<ProjectExportPdfResult> => {
+      try {
+        const win = BrowserWindow.fromWebContents(event.sender)
+        if (!win) return { ok: false, error: '导出窗口不可用' }
+
+        const result = await dialog.showSaveDialog(win, {
+          title: '导出 PDF',
+          defaultPath: safePdfFileName(options?.title),
+          filters: [{ name: 'PDF', extensions: ['pdf'] }]
+        })
+
+        if (result.canceled || !result.filePath) {
+          return { ok: false, canceled: true, error: '用户取消导出' }
+        }
+
+        const data = await win.webContents.printToPDF({
+          printBackground: true,
+          preferCSSPageSize: true,
+          pageSize: 'Letter'
+        })
+        const tempPath = join(dirname(result.filePath), `.${Date.now()}.tmp.pdf`)
+        await writeFile(tempPath, data)
+        await rename(tempPath, result.filePath)
+        return { ok: true, filePath: result.filePath }
+      } catch (error) {
+        return { ok: false, error: error instanceof Error ? error.message : 'PDF 导出失败' }
       }
     }
   )

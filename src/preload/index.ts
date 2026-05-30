@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
-import type { AppApi, ProjectDocument } from '../shared/project'
+import type { AppApi, ProjectDocument, ProjectExportPdfOptions } from '../shared/project'
 
 // Custom APIs for renderer
 const api: AppApi = {
@@ -13,7 +13,9 @@ const api: AppApi = {
     openFromPath: (filePath: string) => ipcRenderer.invoke('project:open-from-path', filePath),
     importFile: () => ipcRenderer.invoke('project:import-file'),
     importPaths: (paths: string[]) => ipcRenderer.invoke('project:import-paths', paths),
-    readAssetFile: (relativePath: string) => ipcRenderer.invoke('project:read-asset-file', relativePath)
+    readAssetFile: (relativePath: string) => ipcRenderer.invoke('project:read-asset-file', relativePath),
+    exportPdf: (options?: ProjectExportPdfOptions) =>
+      ipcRenderer.invoke('project:export-pdf', options)
   },
   recent: {
     get: () => ipcRenderer.invoke('recent:get'),

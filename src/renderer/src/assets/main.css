@@ -176,6 +176,47 @@ code {
   }
 }
 
+@media print {
+  @page {
+    size: Letter;
+    margin: 0;
+  }
+
+  html,
+  body,
+  #app {
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #fff !important;
+  }
+
+  body * {
+    visibility: hidden;
+  }
+
+  .pdf-export-root,
+  .pdf-export-root * {
+    visibility: visible;
+  }
+
+  .pdf-export-root {
+    position: absolute;
+    inset: 0 auto auto 0;
+    background: #fff !important;
+  }
+
+  .pdf-page {
+    box-shadow: none !important;
+    break-after: page;
+    page-break-after: always;
+  }
+
+  .pdf-page:last-child {
+    break-after: auto;
+    page-break-after: auto;
+  }
+}
+
 @media (max-width: 720px) {
   .text {
     font-size: 20px;

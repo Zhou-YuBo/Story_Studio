@@ -3,6 +3,7 @@ import { useEditor, EditorContent, type Editor, type EditorEvents } from '@tipta
 import StarterKit from '@tiptap/starter-kit'
 import { storeToRefs } from 'pinia'
 import { ref, onBeforeUnmount, onMounted, watch, nextTick, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { useEditorBridge } from '../../stores/editor-bridge'
 import { useLineGridStore } from '../../stores/line-grid'
 import { useProjectStore } from '../../stores/project'
@@ -33,6 +34,7 @@ const smartTypeState = createSmartTypeState()
 const editorBridge = useEditorBridge()
 const lineGridStore = useLineGridStore()
 const projectStore = useProjectStore()
+const router = useRouter()
 const { snapshot } = storeToRefs(lineGridStore)
 const scrollRef = ref<HTMLElement | null>(null)
 
@@ -199,6 +201,11 @@ function toggleElement(type: string): void {
   elementPickerVisible.value = false
 }
 
+function openExportView(): void {
+  if (editor.value) projectStore.setSceneDoc(editor.value.getJSON())
+  void router.push('/export')
+}
+
 // 元素选择框（空行 Enter 触发）
 const elementPickerVisible = ref(false)
 const pickerRef = ref<HTMLDivElement | null>(null)
@@ -316,6 +323,10 @@ function onPickerKeydown(e: KeyboardEvent): void {
         >
           I
         </button>
+      </div>
+      <div class="toolbar-divider" />
+      <div class="toolbar-group">
+        <button title="导出 PDF" @click="openExportView">PDF</button>
       </div>
     </div>
     <div class="editor-scroll scrollbar-editor" ref="scrollRef">

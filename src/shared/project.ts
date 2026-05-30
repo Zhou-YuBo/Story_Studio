@@ -96,6 +96,14 @@ export type ProjectImportResult =
   | { ok: true; document: ProjectDocument; projectPath: string; assetsPath: string | null }
   | { ok: false; canceled?: boolean; error: string }
 
+export type ProjectExportPdfResult =
+  | { ok: true; filePath: string }
+  | { ok: false; canceled?: boolean; error: string }
+
+export interface ProjectExportPdfOptions {
+  title?: string
+}
+
 export interface ImportedAsset {
   relativePath: string
   originalName: string
@@ -112,6 +120,7 @@ export interface ProjectApi {
   importFile(): Promise<ProjectImportFileResult>
   importPaths(paths: string[]): Promise<ProjectImportFileResult>
   readAssetFile(relativePath: string): Promise<ProjectReadAssetResult>
+  exportPdf(options?: ProjectExportPdfOptions): Promise<ProjectExportPdfResult>
 }
 
 export type ProjectImportFileResult =
