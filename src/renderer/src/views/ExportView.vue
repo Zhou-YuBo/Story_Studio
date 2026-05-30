@@ -459,10 +459,12 @@ button.entry-card:hover {
 }
 
 .export-meta dd {
+  min-width: 0;
   margin: 0;
   color: #d4d4d8;
   font-size: 13px;
   line-height: 1.4;
+  overflow-wrap: anywhere;
 }
 
 .export-button {
@@ -534,6 +536,14 @@ button.entry-card:hover {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 18px;
+}
+
+.proof-result .proof-meta div:has(dd:nth-child(2)) {
+  min-width: 0;
+}
+
+.proof-result .proof-meta div:nth-child(n + 3) {
+  grid-column: 1 / -1;
 }
 
 .proof-action {
