@@ -7,6 +7,8 @@ import { registerProjectIpc } from './project-ipc'
 import { FileProjectRepository } from './project-repository'
 import { registerRecentIpc } from './recent-projects'
 
+const APP_ID = 'cn.richopera.storystudio'
+
 let repository: FileProjectRepository
 
 function createWindow(): void {
@@ -20,7 +22,11 @@ function createWindow(): void {
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false
+      sandbox: false,
+      contextIsolation: true,
+      nodeIntegration: false,
+      webSecurity: true,
+      allowRunningInsecureContent: false
     }
   })
 
@@ -31,6 +37,12 @@ function createWindow(): void {
   mainWindow.webContents.setWindowOpenHandler((details) => {
     shell.openExternal(details.url)
     return { action: 'deny' }
+  })
+
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    if (!isAllowedNavigationUrl(url)) {
+      event.preventDefault()
+    }
   })
 
   // HMR for renderer base on electron-vite cli.
@@ -47,7 +59,7 @@ function createWindow(): void {
 // Some APIs can only be used after this event occurs.
 app.whenReady().then(() => {
   // Set app user model id for windows
-  electronApp.setAppUserModelId('com.electron')
+  electronApp.setAppUserModelId(APP_ID)
 
   // Default open or close DevTools by F12 in development
   // and ignore CommandOrControl + R in production.
@@ -64,6 +76,11 @@ app.whenReady().then(() => {
     try {
       const url = new URL(request.url)
       const relativePath = decodeURIComponent(url.host + url.pathname)
+
+      if (!relativePath) {
+        return new Response('Bad request', { status: 400 })
+      }
+
       const absolutePath = repository.getAssetAbsolutePath(relativePath)
       const data = await readFile(absolutePath)
       const mimeType = getMimeType(extname(absolutePath))
@@ -92,6 +109,14 @@ app.on('window-all-closed', () => {
     app.quit()
   }
 })
+
+function isAllowedNavigationUrl(targetUrl: string): boolean {
+  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+    return targetUrl.startsWith(process.env['ELECTRON_RENDERER_URL'])
+  }
+
+  return targetUrl.startsWith('file://')
+}
 
 function getMimeType(ext: string): string {
   const map: Record<string, string> = {

@@ -1,7 +1,7 @@
 import type { App, BrowserWindow, OpenDialogOptions, SaveDialogOptions } from 'electron'
 import { dialog } from 'electron'
-import { mkdir, readFile, rename, writeFile, copyFile } from 'fs/promises'
-import { basename, dirname, extname, join } from 'path'
+import { mkdir, readFile, rename, writeFile, copyFile, stat } from 'fs/promises'
+import { basename, dirname, extname, isAbsolute, join, relative, resolve } from 'path'
 import { randomUUID } from 'crypto'
 import {
   createDefaultProjectDocument,
@@ -12,6 +12,8 @@ import {
 } from '../shared/project'
 
 const PROJECT_FILTER = [{ name: 'Story Studio 项目', extensions: ['story.json', 'json'] }]
+const MAX_PROJECT_FILE_SIZE = 50 * 1024 * 1024
+
 
 export class FileProjectRepository {
   private projectFile: string | null = null
@@ -27,6 +29,7 @@ export class FileProjectRepository {
   }
 
   async loadFromPath(filePath: string): Promise<ProjectDocument> {
+    await assertSupportedProjectFile(filePath)
     const raw = await readFile(filePath, 'utf-8')
     const document = normalizeProjectDocument(JSON.parse(raw))
     this.projectFile = filePath
@@ -81,6 +84,7 @@ export class FileProjectRepository {
     if (result.canceled || result.filePaths.length === 0) return null
 
     const filePath = result.filePaths[0]
+    await assertSupportedProjectFile(filePath)
     const raw = await readFile(filePath, 'utf-8')
     const document = normalizeProjectDocument(JSON.parse(raw))
     this.projectFile = filePath
@@ -125,12 +129,17 @@ export class FileProjectRepository {
   }
 
   async importAsset(sourcePath: string): Promise<ImportedAsset> {
+    const sourceStats = await stat(sourcePath)
+    if (!sourceStats.isFile()) {
+      throw new Error('请选择有效的素材文件')
+    }
+
     const assetsDir = this.getAssetsDir()
     await mkdir(assetsDir, { recursive: true })
 
     const ext = extname(sourcePath)
     const relativePath = `${randomUUID()}${ext}`
-    const destPath = join(assetsDir, relativePath)
+    const destPath = resolveAssetPath(assetsDir, relativePath)
 
     await copyFile(sourcePath, destPath)
 
@@ -143,8 +152,45 @@ export class FileProjectRepository {
   }
 
   getAssetAbsolutePath(relativePath: string): string {
-    return join(this.getAssetsDir(), relativePath)
+    return resolveAssetPath(this.getAssetsDir(), relativePath)
   }
+}
+
+async function assertSupportedProjectFile(filePath: string): Promise<void> {
+  const fileStats = await stat(filePath)
+
+  if (!fileStats.isFile()) {
+    throw new Error('请选择有效的项目文件')
+  }
+
+  if (fileStats.size > MAX_PROJECT_FILE_SIZE) {
+    throw new Error('项目文件过大')
+  }
+
+  const lowerPath = filePath.toLowerCase()
+  if (!lowerPath.endsWith('.json') && !lowerPath.endsWith('.story.json')) {
+    throw new Error('请选择 JSON 项目文件')
+  }
+}
+
+function assertInsideDir(rootDir: string, targetPath: string): void {
+  const resolvedRoot = resolve(rootDir)
+  const resolvedTarget = resolve(targetPath)
+  const relativePath = relative(resolvedRoot, resolvedTarget)
+
+  if (relativePath.startsWith('..') || isAbsolute(relativePath)) {
+    throw new Error('路径不在允许目录内')
+  }
+}
+
+function resolveAssetPath(assetsDir: string, relativePath: string): string {
+  if (!relativePath || isAbsolute(relativePath)) {
+    throw new Error('素材路径无效')
+  }
+
+  const absolutePath = resolve(assetsDir, relativePath)
+  assertInsideDir(assetsDir, absolutePath)
+  return absolutePath
 }
 
 function guessMimeType(ext: string): string {
