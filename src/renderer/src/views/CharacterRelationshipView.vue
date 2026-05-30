@@ -21,9 +21,9 @@ const portableCharacterId = ref('')
 const draggingNodeId = ref('')
 const curveBoardRef = ref<HTMLElement | null>(null)
 
-const curveYAxisTop = 12
-const curveXAxisY = 82
-const curveXAxisLabelY = 92
+const curveYAxisTop = 10
+const curveXAxisY = 74
+const curveXAxisLabelY = 84
 
 const characterA = computed(() => characterStore.getCharacterById(characterAId.value))
 const characterB = computed(() => characterStore.getCharacterById(characterBId.value))
@@ -210,14 +210,7 @@ function saveRelationship(): void {
           <p class="section-kicker">人物工作台 / 二人关系</p>
           <h1>二人关系</h1>
         </div>
-        <div class="header-side-actions">
-          <RouterLink class="back-button" to="/character">返回首页</RouterLink>
-          <PortableCharacterDetailTrigger
-            class="relationship-detail-trigger"
-            :character-name="portableCharacterName"
-            @open="detailPanelOpen = true"
-          />
-        </div>
+        <RouterLink class="back-button" to="/character">返回首页</RouterLink>
       </div>
 
       <section class="relationship-toolbar">
@@ -256,10 +249,15 @@ function saveRelationship(): void {
       </section>
     </header>
 
+    <PortableCharacterDetailTrigger
+      class="relationship-detail-trigger"
+      :character-name="portableCharacterName"
+      @open="detailPanelOpen = true"
+    />
+
     <main v-if="relationship && characterA && characterB" class="relationship-workbench">
       <aside class="self-column">
         <div class="column-heading">
-          <p class="section-kicker">A in B's Eyes</p>
           <h2>{{ characterA.profile.name || '人物 A' }} 在 {{ characterB.profile.name || '人物 B' }} 面前</h2>
         </div>
 
@@ -276,10 +274,7 @@ function saveRelationship(): void {
       <section class="relationship-axis">
         <section class="closeness-panel">
           <div class="panel-heading">
-            <div>
-              <p class="section-kicker">Plot Curve</p>
-              <h2>亲疏发展轴</h2>
-            </div>
+            <h2>亲疏发展轴</h2>
             <button class="ghost-button" type="button" @click="addChangeNode(relationship.id)">
               添加节点
             </button>
@@ -391,10 +386,7 @@ function saveRelationship(): void {
 
         <section class="definitions-panel">
           <div class="panel-heading">
-            <div>
-              <p class="section-kicker">Relationship Definition</p>
-              <h2>四类关系</h2>
-            </div>
+            <h2>四类关系</h2>
           </div>
 
           <div class="definition-grid">
@@ -413,7 +405,6 @@ function saveRelationship(): void {
 
       <aside class="self-column">
         <div class="column-heading">
-          <p class="section-kicker">B in A's Eyes</p>
           <h2>{{ characterB.profile.name || '人物 B' }} 在 {{ characterA.profile.name || '人物 A' }} 面前</h2>
         </div>
 
@@ -461,9 +452,9 @@ function saveRelationship(): void {
 .relationship-header {
   flex-shrink: 0;
   display: grid;
-  gap: 10px;
+  gap: 8px;
   border-bottom: 1px solid rgba(63, 63, 70, 0.82);
-  padding: 12px 22px 14px;
+  padding: 10px 22px 12px;
 }
 
 .relationship-topbar {
@@ -483,7 +474,7 @@ function saveRelationship(): void {
 }
 
 .relationship-header h1 {
-  font-size: 24px;
+  font-size: 22px;
 }
 
 .section-kicker {
@@ -512,25 +503,8 @@ function saveRelationship(): void {
   padding: 8px 11px;
 }
 
-.header-side-actions {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-}
-
-.header-side-actions :deep(.relationship-detail-trigger) {
-  position: static;
-  width: 128px;
-  border-right: 1px solid rgba(113, 113, 122, 0.82);
-  border-radius: 14px;
-  padding: 9px 11px;
-  transform: none;
-}
-
-.header-side-actions :deep(.relationship-detail-trigger:hover),
-.header-side-actions :deep(.relationship-detail-trigger:focus-visible) {
-  transform: none;
+.relationship-detail-trigger {
+  top: 118px;
 }
 
 .text-button {
@@ -602,7 +576,6 @@ function saveRelationship(): void {
 .closeness-panel,
 .definitions-panel {
   min-height: 0;
-  overflow: hidden;
 }
 
 .self-column,
@@ -622,7 +595,8 @@ function saveRelationship(): void {
 
 .column-heading h2,
 .panel-heading h2 {
-  font-size: 16px;
+  font-size: 15px;
+  line-height: 1.25;
 }
 
 .self-row {
@@ -651,23 +625,23 @@ function saveRelationship(): void {
 
 .relationship-axis {
   display: grid;
-  grid-template-rows: minmax(340px, 1fr) auto;
-  gap: 12px;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 10px;
 }
 
 .closeness-panel,
 .definitions-panel {
   display: grid;
-  gap: 10px;
-  padding: 12px;
+  gap: 8px;
+  padding: 10px;
 }
 
 .closeness-panel {
-  grid-template-rows: auto minmax(220px, 1fr) auto;
+  grid-template-rows: auto 140px auto;
 }
 
 .definitions-panel {
-  grid-template-rows: auto auto;
+  grid-template-rows: auto minmax(0, 1fr);
 }
 
 .panel-heading {
@@ -679,7 +653,8 @@ function saveRelationship(): void {
 
 .curve-board {
   position: relative;
-  min-height: 0;
+  height: 140px;
+  min-height: 140px;
   border: 1px solid rgba(63, 63, 70, 0.72);
   border-radius: 16px;
   background:
@@ -840,24 +815,38 @@ function saveRelationship(): void {
 }
 
 .definition-grid {
+  min-height: 0;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: repeat(2, minmax(0, 1fr));
   gap: 8px;
 }
 
 .definition-cell {
+  min-height: 0;
   display: grid;
-  gap: 5px;
+  grid-template-columns: 58px minmax(0, 1fr);
+  align-items: stretch;
+  gap: 7px;
   border: 1px solid rgba(63, 63, 70, 0.62);
   border-radius: 14px;
   background: rgba(9, 9, 11, 0.22);
-  padding: 9px;
+  padding: 8px;
+}
+
+.definition-cell span {
+  align-self: start;
+  writing-mode: vertical-rl;
+  letter-spacing: 0.08em;
+  text-orientation: mixed;
 }
 
 .definition-cell textarea {
-  min-height: 56px;
+  height: 100%;
+  min-height: 0;
+  overflow: auto;
   line-height: 1.45;
-  resize: vertical;
+  resize: none;
 }
 
 .empty-state {
@@ -874,9 +863,6 @@ function saveRelationship(): void {
 
   .relationship-workbench {
     grid-template-columns: 1fr;
-    overflow: auto;
-    scrollbar-width: thin;
-    scrollbar-color: rgba(161, 161, 170, 0.24) transparent;
   }
 
   .self-column {
@@ -895,22 +881,6 @@ function saveRelationship(): void {
     overflow: visible;
   }
 
-  .curve-board {
-    min-height: 320px;
-  }
-
-  .relationship-workbench::-webkit-scrollbar {
-    width: 7px;
-  }
-
-  .relationship-workbench::-webkit-scrollbar-track {
-    background: transparent;
-  }
-
-  .relationship-workbench::-webkit-scrollbar-thumb {
-    border-radius: 999px;
-    background: rgba(161, 161, 170, 0.2);
-  }
 }
 
 @media (max-width: 920px) {
@@ -918,14 +888,9 @@ function saveRelationship(): void {
     padding: 12px 16px 14px;
   }
 
-  .relationship-topbar,
-  .header-side-actions {
+  .relationship-topbar {
     align-items: flex-start;
     flex-direction: column;
-  }
-
-  .header-side-actions {
-    width: 100%;
   }
 
   .relationship-toolbar {
@@ -943,23 +908,32 @@ function saveRelationship(): void {
   }
 
   .self-column,
-  .definition-grid,
   .active-node-controls {
     grid-template-columns: 1fr;
+  }
+
+  .definition-grid {
+    grid-template-columns: 1fr;
+    grid-template-rows: repeat(4, minmax(72px, 1fr));
+  }
+
+  .definition-cell {
+    grid-template-columns: 64px minmax(0, 1fr);
+  }
+
+  .definition-cell span {
+    writing-mode: horizontal-tb;
   }
 }
 
 @media (max-width: 760px) {
   .relationship-page {
-    overflow: auto;
-  }
-
-  .relationship-workbench {
-    overflow: visible;
+    overflow: hidden;
   }
 
   .curve-board {
-    min-height: 280px;
+    height: 140px;
+    min-height: 140px;
   }
 }
 
@@ -969,16 +943,7 @@ function saveRelationship(): void {
     padding-block: 10px;
   }
 
-  .relationship-axis {
-    grid-template-rows: minmax(300px, 1fr) auto;
-  }
-
-  .closeness-panel {
-    grid-template-rows: auto minmax(190px, 1fr) auto;
-  }
-
-  .self-row textarea,
-  .definition-cell textarea {
+  .self-row textarea {
     min-height: 48px;
   }
 }
